@@ -4,6 +4,9 @@
 # cache configured below.
 sudo: false
 
+jdk:
+  - oraclejdk8
+
 # These are needed to run the Android SDK tools.
 addons:
   apt:

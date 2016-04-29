@@ -43,7 +43,7 @@ public class VegetableReader {
   /**
    * Reads in the (assumedly xml) contents of the input stream and returns a
    * SimpleVegetable. Throws an IOException if JAXB has trouble unmarshalling the object.
-   * <br/>
+   * <p>
    * This method does <i>not</i> close the InputStream passed to it.
    */
   public SimpleVegetable read(InputStream in) throws IOException {

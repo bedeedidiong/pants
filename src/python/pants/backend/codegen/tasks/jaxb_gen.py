@@ -10,14 +10,19 @@ import re
 
 from pants.backend.codegen.targets.jaxb_library import JaxbLibrary
 from pants.backend.codegen.tasks.simple_codegen_task import SimpleCodegenTask
+from pants.backend.jvm.subsystems.shader import Shader
+from pants.backend.jvm.targets.jar_dependency import JarDependency
 from pants.backend.jvm.targets.java_library import JavaLibrary
 from pants.backend.jvm.tasks.nailgun_task import NailgunTask
 from pants.base.exceptions import TaskError
+from pants.base.workunit import WorkUnitLabel
 from pants.java.distribution.distribution import DistributionLocator
 
 
 class JaxbGen(SimpleCodegenTask, NailgunTask):
   """Generates java source files from jaxb schema (.xsd)."""
+
+  _MAIN = 'com.sun.tools.xjc.Driver'
 
   def __init__(self, *args, **kwargs):
     """
@@ -30,10 +35,20 @@ class JaxbGen(SimpleCodegenTask, NailgunTask):
     if self.context.products.isrequired(lang):
       self.gen_langs.add(lang)
 
-  def _compile_schema(self, args):
-    classpath = DistributionLocator.cached(jdk=True).find_libs(['tools.jar'])
-    java_main = 'com.sun.tools.internal.xjc.Driver'
-    return self.runjava(classpath=classpath, main=java_main, args=args, workunit_name='xjc')
+  @classmethod
+  def register_options(cls, register):
+    super(JaxbGen, cls).register_options(register)
+
+    cls.register_jvm_tool(register,
+                          'jaxb-compiler',
+                          classpath=[
+                            JarDependency(org='org.glassfish.jaxb', name='jaxb-xjc', rev='2.2.11'),
+                          ],
+                          main=cls._MAIN,
+                          custom_rules=[
+                            # Loads plugins from its classpath via reflection.
+                            Shader.exclude_package('com.sun.tools.xjc', recursive=True),
+                          ],)
 
   def synthetic_target_type(self, target):
     return JavaLibrary
@@ -57,7 +72,11 @@ class JaxbGen(SimpleCodegenTask, NailgunTask):
       # NB(zundel): The -no-header option keeps it from writing a timestamp, making the
       # output non-deterministic.  See https://github.com/pantsbuild/pants/issues/1786
       args = ['-p', output_package, '-d', target_workdir, '-no-header', path_to_xsd]
-      result = self._compile_schema(args)
+      result = self.runjava(classpath=self.tool_classpath('jaxb-compiler'),
+                            main=self._MAIN,
+                            args=args,
+                            workunit_name='xjc',
+                            workunit_labels=[WorkUnitLabel.TOOL])
 
       if result != 0:
         raise TaskError('xjc ... exited non-zero ({code})'.format(code=result))

@@ -6,8 +6,10 @@ from __future__ import (absolute_import, division, generators, nested_scopes, pr
                         unicode_literals, with_statement)
 
 import logging
+import sys
 import threading
 import time
+from cffi import FFI
 from collections import defaultdict, deque
 from contextlib import contextmanager
 
@@ -24,6 +26,14 @@ from pants.util.objects import datatype
 
 
 logger = logging.getLogger(__name__)
+
+
+def load_and_run():
+  ffi = FFI()
+  lib = ffi.dlopen("./src/rust/graph/libgraph.dylib")
+  print(">>> loaded {}".format(lib), file=sys.stderr)
+  ffi.cdef('int test();')
+  print(">>> ran! {}".format(lib.test()), file=sys.stderr)
 
 
 class CompletedNodeException(ValueError):
@@ -688,6 +698,8 @@ class LocalScheduler(object):
     by this method are intended to be executed in multiple threads, and then satisfied by the
     scheduling thread.
     """
+
+    load_and_run()
 
     with self._product_graph_lock:
       # A dict from Node entry to a possibly executing Step. Only one Step exists for a Node at a time.

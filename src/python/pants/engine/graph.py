@@ -7,8 +7,7 @@ from __future__ import (absolute_import, division, generators, nested_scopes, pr
 
 from collections import deque
 
-from pants.engine.nodes import (FilesystemNode, Node, Noop, Return, SelectNode, State, TaskNode,
-                                Throw, Waiting)
+from pants.engine.nodes import Node, Noop, Return, SelectNode, State, TaskNode, Throw, Waiting
 
 
 class CompletedNodeException(ValueError):
@@ -60,10 +59,6 @@ class Graph(object):
 
   def __len__(self):
     return len(self._nodes)
-
-  def is_complete(self, node):
-    entry = self._nodes.get(node, None)
-    return entry and entry.is_complete
 
   def state(self, node):
     entry = self._nodes.get(node, None)
@@ -214,15 +209,6 @@ class Graph(object):
 
     invalidated_count = len(invalidated_entries)
     return invalidated_count
-
-  def invalidate_files(self, filenames):
-    """Given a set of changed filenames, invalidate all related FilesystemNodes in the graph."""
-    subjects = set(FilesystemNode.generate_subjects(filenames))
-
-    def predicate(node, state):
-      return type(node) is FilesystemNode and node.subject in subjects
-
-    return self.invalidate(predicate)
 
   def walk(self, roots, predicate=None, dependents=False):
     """Yields Nodes and their States depth-first in pre-order, starting from the given roots.

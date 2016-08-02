@@ -335,10 +335,14 @@ class LocalScheduler(object):
     self._product_graph.update_state(node, result)
 
   def invalidate_files(self, filenames):
-    """Calls `Graph.invalidate_files()` against an internal product Graph instance
-    under protection of a scheduler-level lock."""
+    """Calls `Graph.invalidate_files()` against an internal product Graph instance."""
     with self._product_graph_lock:
-      return self._product_graph.invalidate_files(filenames)
+      subjects = set(FilesystemNode.generate_subjects(filenames))
+
+      def predicate(node, state):
+        return type(node) is FilesystemNode and node.subject in subjects
+
+      return self._product_graph.invalidate(predicate)
 
   def schedule(self, execution_request):
     """Yields batches of Steps until the roots specified by the request have been completed.

@@ -15,8 +15,8 @@ from pants.base.exceptions import TaskError
 from pants.base.file_system_project_tree import FileSystemProjectTree
 from pants.build_graph.address import Address
 from pants.engine.addressable import SubclassesOf, addressable_list
+from pants.engine.build_files import create_graph_tasks
 from pants.engine.fs import Dirs, Files, FilesContent, PathGlobs, create_fs_tasks
-from pants.engine.graph import create_graph_tasks
 from pants.engine.mapper import AddressFamily, AddressMapper
 from pants.engine.parser import SymbolTable
 from pants.engine.scheduler import LocalScheduler

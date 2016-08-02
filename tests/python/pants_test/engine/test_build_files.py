@@ -11,8 +11,8 @@ import unittest
 from pants.build_graph.address import Address
 from pants.engine.addressable import (Exactly, SubclassesOf, addressable, addressable_dict,
                                       addressable_list)
+from pants.engine.build_files import ResolvedTypeMismatchError, create_graph_tasks
 from pants.engine.engine import LocalSerialEngine
-from pants.engine.graph import ResolvedTypeMismatchError, create_graph_tasks
 from pants.engine.mapper import AddressMapper, ResolveError
 from pants.engine.nodes import Return, Throw
 from pants.engine.parser import SymbolTable

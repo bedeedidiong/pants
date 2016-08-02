@@ -110,13 +110,13 @@ python_tests(
 )
 
 python_tests(
-  name='graph',
-  sources=['test_graph.py'],
+  name='build_files',
+  sources=['test_build_files.py'],
   dependencies=[
     ':scheduler_test_base',
     'src/python/pants/build_graph',
+    'src/python/pants/engine:build_files',
     'src/python/pants/engine:engine',
-    'src/python/pants/engine:graph',
     'src/python/pants/engine:mapper',
     'src/python/pants/engine:parser',
     'src/python/pants/engine:storage',

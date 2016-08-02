@@ -63,8 +63,8 @@ python_library(
 )
 
 python_library(
-  name='graph',
-  sources=['graph.py'],
+  name='build_files',
+  sources=['build_files.py'],
   dependencies=[
     '3rdparty/python:six',
     ':addressable',

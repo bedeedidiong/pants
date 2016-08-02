@@ -52,6 +52,18 @@ python_tests(
   ]
 )
 
+python_tests(
+  name='graph',
+  sources=['test_graph.py'],
+  coverage=['pants.engine.graph'],
+  dependencies=[
+    'src/python/pants/build_graph',
+    'tests/python/pants_test/engine/examples:planners',
+    'src/python/pants/engine:engine',
+    'src/python/pants/engine:graph',
+  ]
+)
+
 
 python_tests(
   name='isolated_process',

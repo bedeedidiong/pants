@@ -63,6 +63,22 @@ python_library(
 )
 
 python_library(
+  name='graph',
+  sources=['graph.py'],
+  dependencies=[
+    '3rdparty/python/twitter/commons:twitter.common.collections',
+    '3rdparty/python:cffi',
+    ':addressable',
+    ':fs',
+    ':isolated_process',
+    ':nodes',
+    'src/python/pants/base:specs',
+    'src/python/pants/build_graph',
+    'src/python/pants/util:objects',
+  ]
+)
+
+python_library(
   name='build_files',
   sources=['build_files.py'],
   dependencies=[
@@ -161,6 +177,7 @@ python_library(
     '3rdparty/python:cffi',
     ':addressable',
     ':fs',
+    ':graph',
     ':isolated_process',
     ':nodes',
     'src/python/pants/base:specs',

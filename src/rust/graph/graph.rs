@@ -24,7 +24,8 @@ impl Graph {
 
   fn ensure_entry(&mut self, node: Node) -> &mut Entry {
     let default_state = self.default_state;
-    self.nodes.entry(node).or_insert_with(||
+    self.nodes.entry(node).or_insert_with(|| {
+      println!(">>> rust instantiating Entry for {}", node);
       Entry {
         node: node,
         state: default_state,
@@ -32,7 +33,7 @@ impl Graph {
         dependents: HashSet::new(),
         cyclic_dependencies: HashSet::new(),
       }
-    )
+    })
   }
 }
 
@@ -45,14 +46,16 @@ pub extern fn new(default_state: State) -> *const Graph {
       nodes: HashMap::new()
     };
   // and return a raw pointer to the boxed value.
-  Box::into_raw(Box::new(graph))
+  let raw = Box::into_raw(Box::new(graph));
+  println!(">>> rust creating {:?} with default state {}", raw, default_state);
+  raw
 }
 
 #[no_mangle]
 pub extern fn destroy(graph_ptr: *mut Graph) {
   // convert the raw pointer back to a Box (without `forget`ing it) in order to cause it
   // to be destroyed at the end of this function.
-  println!("destroying {:?}", graph_ptr);
+  println!(">>> rust destroying {:?}", graph_ptr);
   let _ = unsafe { Box::from_raw(graph_ptr) };
 }
 

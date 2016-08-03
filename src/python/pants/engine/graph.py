@@ -32,9 +32,13 @@ class _Native(object):
     ffi.cdef(
         '''
         struct Graph;
-        struct Graph* new();
+        typedef uint64_t Node;
+        typedef uint64_t State;
+
+        struct Graph* new(State);
         void destroy(struct Graph*);
         uint64_t len(struct Graph*);
+        void complete_node(struct Graph*, Node, State);
         '''
       )
     return ffi
@@ -87,16 +91,16 @@ class Graph(object):
               {d.node for d in self.dependencies},
               {d.node for d in self.dependents},
               self.cyclic_dependencies)
-
   def __init__(self, validator=None):
     self._validator = validator or Node.validate_node
     # A dict of Node->Entry.
     self._nodes = dict()
-
-    self._graph = _Native.gc(_Native.lib().new(), _Native.lib().destroy)
+    # A native underlying graph.
+    self._graph = _Native.gc(_Native.lib().new(id(None)), _Native.lib().destroy)
 
   def __len__(self):
-    return _Native.lib().len(self._graph)
+    _Native.lib().len(self._graph)
+    return len(self._nodes)
 
   def state(self, node):
     entry = self._nodes.get(node, None)
@@ -149,6 +153,7 @@ class Graph(object):
     if not entry:
       self._validator(node)
       self._nodes[node] = entry = self.Entry(node)
+    _Native.lib().complete_node(self._graph, id(entry), id(entry))
     return entry
 
   def _add_dependencies(self, node_entry, dependencies):

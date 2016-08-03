@@ -19,6 +19,7 @@ class CompletedNodeException(ValueError):
 class IncompleteDependencyException(ValueError):
   """Indicates an attempt to complete a Node that has incomplete dependencies."""
 
+
 class _Native(object):
   _GRAPH_LIB = None
 

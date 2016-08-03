@@ -4,18 +4,18 @@ use std::collections::VecDeque;
 use std::iter::IntoIterator;
 
 pub type Node = u64;
-pub type State = u64;
+pub type StateType = u8;
 
 pub struct Entry {
   node: Node,
-  state: State,
+  state: StateType,
   dependencies: HashSet<Node>,
   dependents: HashSet<Node>,
   cyclic_dependencies: HashSet<Node>,
 }
 
 pub struct Graph {
-  empty_state: State,
+  empty_state: StateType,
   nodes: HashMap<Node,Entry>,
 }
 
@@ -109,7 +109,7 @@ fn with_graph<F,T>(graph_ptr: *mut Graph, f: F) -> T
 }
 
 #[no_mangle]
-pub extern fn new(empty_state: State) -> *const Graph {
+pub extern fn new(empty_state: StateType) -> *const Graph {
   // allocate on the heap via `Box`.
   let graph =
     Graph {
@@ -138,7 +138,7 @@ pub extern fn len(graph_ptr: *mut Graph) -> u64 {
 }
 
 #[no_mangle]
-pub extern fn complete_node(graph_ptr: *mut Graph, node: Node, state: State) {
+pub extern fn complete_node(graph_ptr: *mut Graph, node: Node, state: StateType) {
   with_graph(graph_ptr, |graph| {
     graph.ensure_entry(node).state = state;
   })

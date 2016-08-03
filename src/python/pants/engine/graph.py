@@ -33,12 +33,12 @@ class _Native(object):
         '''
         struct Graph;
         typedef uint64_t Node;
-        typedef uint64_t State;
+        typedef uint8_t StateType;
 
-        struct Graph* new(State);
+        struct Graph* new(StateType);
         void destroy(struct Graph*);
         uint64_t len(struct Graph*);
-        void complete_node(struct Graph*, Node, State);
+        void complete_node(struct Graph*, Node, StateType);
         void add_dependency(struct Graph*, Node, Node);
         '''
       )
@@ -97,7 +97,7 @@ class Graph(object):
     # A dict of Node->Entry.
     self._nodes = dict()
     # A native underlying graph.
-    self._graph = _Native.gc(_Native.lib().new(id(None)), _Native.lib().destroy)
+    self._graph = _Native.gc(_Native.lib().new(Waiting.type_id), _Native.lib().destroy)
 
   def __len__(self):
     native_len = _Native.lib().len(self._graph)
@@ -128,6 +128,7 @@ class Graph(object):
               'Cannot complete {} with {} while it has an incomplete dep:\n  {}'
                 .format(node, state, dep.node))
       entry.state = state
+      _Native.lib().complete_node(self._graph, id(entry), state.type_id)
     elif type(state) is Waiting:
       for dependency in state.dependencies:
         self._add_dependency(entry, dependency)
@@ -157,7 +158,6 @@ class Graph(object):
     if not entry:
       self._validator(node)
       self._nodes[node] = entry = self.Entry(node)
-    _Native.lib().complete_node(self._graph, id(entry), id(entry))
     return entry
 
   def _add_dependency(self, node_entry, dependency):

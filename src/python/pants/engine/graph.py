@@ -9,6 +9,8 @@ from collections import deque
 
 from pants.engine.nodes import Node, Noop, Return, SelectNode, State, TaskNode, Throw, Waiting
 
+from pants.util.memo import memoized_method
+
 
 class CompletedNodeException(ValueError):
   """Indicates an attempt to change a Node that is already completed."""
@@ -16,6 +18,38 @@ class CompletedNodeException(ValueError):
 
 class IncompleteDependencyException(ValueError):
   """Indicates an attempt to complete a Node that has incomplete dependencies."""
+
+class _Native(object):
+  _GRAPH_LIB = None
+
+  @classmethod
+  @memoized_method
+  def _ffi(cls):
+    from cffi import FFI
+
+    ffi = FFI()
+    ffi.cdef(
+        '''
+        struct Graph;
+        struct Graph* graph_new();
+        void graph_destroy(struct Graph*);
+        '''
+      )
+    return ffi
+
+  @classmethod
+  @memoized_method
+  def lib(cls):
+    """Load and return the `libgraph` module."""
+    return cls._ffi().dlopen("./src/rust/graph/libgraph.dylib")
+
+  @classmethod
+  def gc(cls, cdata, destructor):
+    """Register a method to be called when `cdata` is garbage collected.
+
+    Returns a new reference that should be used in place of `cdata`.
+    """
+    return cls._ffi().gc(cdata, destructor)
 
 
 class Graph(object):
@@ -56,6 +90,8 @@ class Graph(object):
     self._validator = validator or Node.validate_node
     # A dict of Node->Entry.
     self._nodes = dict()
+
+    self._graph = _Native.gc(_Native.lib().graph_new(), _Native.lib().graph_destroy)
 
   def __len__(self):
     return len(self._nodes)

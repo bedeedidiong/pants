@@ -30,25 +30,6 @@ from pants.util.objects import datatype
 logger = logging.getLogger(__name__)
 
 
-# TODO: should be a lazy-loaded singleton in the graph module.
-ffi = FFI()
-ffi.cdef(
-    '''
-    struct Graph;
-    struct Graph* graph_new();
-    void graph_destroy(struct Graph*);
-    '''
-  )
-lib = ffi.dlopen("./src/rust/graph/libgraph.dylib")
-
-
-def run():
-  g = lib.graph_new()
-  print(">>> ran! {}".format(g), file=sys.stderr)
-  lib.graph_destroy(g)
-  print(">>> destroyed!", file=sys.stderr)
-
-
 class ExecutionRequest(datatype('ExecutionRequest', ['roots'])):
   """Holds the roots for an execution, which might have been requested by a user.
 
@@ -362,8 +343,6 @@ class LocalScheduler(object):
     by this method are intended to be executed in multiple threads, and then satisfied by the
     scheduling thread.
     """
-
-    run()
 
     with self._product_graph_lock:
       # A dict from Node entry to a possibly executing Step. Only one Step exists for a Node at a time.

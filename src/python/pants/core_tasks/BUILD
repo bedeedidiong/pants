@@ -15,6 +15,7 @@ python_library(
     'src/python/pants/base:revision',
     'src/python/pants/base:workunit',
     'src/python/pants/build_graph',
+    'src/python/pants/engine/subsystem:native',
     'src/python/pants/goal',
     'src/python/pants/goal:task_registrar',
     'src/python/pants/help',

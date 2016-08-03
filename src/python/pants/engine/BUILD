@@ -66,15 +66,7 @@ python_library(
   name='graph',
   sources=['graph.py'],
   dependencies=[
-    '3rdparty/python/twitter/commons:twitter.common.collections',
-    '3rdparty/python:cffi',
-    ':addressable',
-    ':fs',
-    ':isolated_process',
     ':nodes',
-    'src/python/pants/base:specs',
-    'src/python/pants/build_graph',
-    'src/python/pants/util:objects',
   ]
 )
 
@@ -174,7 +166,6 @@ python_library(
   sources=['scheduler.py'],
   dependencies=[
     '3rdparty/python/twitter/commons:twitter.common.collections',
-    '3rdparty/python:cffi',
     ':addressable',
     ':fs',
     ':graph',
@@ -182,6 +173,7 @@ python_library(
     ':nodes',
     'src/python/pants/base:specs',
     'src/python/pants/build_graph',
+    'src/python/pants/engine/subsystem:native',
     'src/python/pants/util:objects',
   ]
 )

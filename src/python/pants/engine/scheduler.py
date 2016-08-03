@@ -6,7 +6,6 @@ from __future__ import (absolute_import, division, generators, nested_scopes, pr
                         unicode_literals, with_statement)
 
 import logging
-import sys
 import threading
 import time
 from collections import defaultdict
@@ -22,6 +21,7 @@ from pants.engine.nodes import (DependenciesNode, FilesystemNode, Node, Noop, Se
                                 StepContext, TaskNode)
 from pants.engine.objects import Closable
 from pants.engine.selectors import Select, SelectDependencies
+from pants.engine.subsystem.native import Native
 from pants.util.objects import datatype
 
 
@@ -207,7 +207,8 @@ class LocalScheduler(object):
     self._node_builder = NodeBuilder.create(tasks)
 
     self._graph_validator = graph_validator
-    self._product_graph = Graph()
+    native = Native.Factory.global_instance().create()
+    self._product_graph = Graph(native)
     self._product_graph_lock = graph_lock or threading.RLock()
     self._inline_nodes = inline_nodes
     self._step_id = 0
@@ -371,6 +372,9 @@ class LocalScheduler(object):
 
         if not ready and not outstanding:
           # Finished.
+          assert len(candidates) == 0, (
+              "Candidates list was not empty: {} entries.".format(len(candidates))
+          )
           break
         yield ready.values()
         scheduling_iterations += 1

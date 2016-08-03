@@ -9,8 +9,6 @@ from collections import deque
 
 from pants.engine.nodes import Node, Noop, Return, SelectNode, State, TaskNode, Throw, Waiting
 
-from pants.util.memo import memoized_method
-
 
 class CompletedNodeException(ValueError):
   """Indicates an attempt to change a Node that is already completed."""
@@ -18,45 +16,6 @@ class CompletedNodeException(ValueError):
 
 class IncompleteDependencyException(ValueError):
   """Indicates an attempt to complete a Node that has incomplete dependencies."""
-
-
-class _Native(object):
-  _GRAPH_LIB = None
-
-  @classmethod
-  @memoized_method
-  def _ffi(cls):
-    from cffi import FFI
-
-    ffi = FFI()
-    ffi.cdef(
-        '''
-        struct Graph;
-        typedef uint64_t Node;
-        typedef uint8_t StateType;
-
-        struct Graph* new(StateType);
-        void destroy(struct Graph*);
-        uint64_t len(struct Graph*);
-        void complete_node(struct Graph*, Node, StateType);
-        void add_dependency(struct Graph*, Node, Node);
-        '''
-      )
-    return ffi
-
-  @classmethod
-  @memoized_method
-  def lib(cls):
-    """Load and return the `libgraph` module."""
-    return cls._ffi().dlopen('./src/rust/graph/libgraph.dylib')
-
-  @classmethod
-  def gc(cls, cdata, destructor):
-    """Register a method to be called when `cdata` is garbage collected.
-
-    Returns a new reference that should be used in place of `cdata`.
-    """
-    return cls._ffi().gc(cdata, destructor)
 
 
 class Graph(object):
@@ -92,15 +51,17 @@ class Graph(object):
               {d.node for d in self.dependencies},
               {d.node for d in self.dependents},
               self.cyclic_dependencies)
-  def __init__(self, validator=None):
+
+  def __init__(self, native, validator=None):
     self._validator = validator or Node.validate_node
     # A dict of Node->Entry.
     self._nodes = dict()
     # A native underlying graph.
-    self._graph = _Native.gc(_Native.lib().new(Waiting.type_id), _Native.lib().destroy)
+    self._native = native
+    self._graph = native.gc(native.lib().new(Waiting.type_id), native.lib().destroy)
 
   def __len__(self):
-    native_len = _Native.lib().len(self._graph)
+    native_len = self._native.lib().len(self._graph)
     actual_len = len(self._nodes)
     assert native_len == actual_len
     return actual_len
@@ -128,7 +89,7 @@ class Graph(object):
               'Cannot complete {} with {} while it has an incomplete dep:\n  {}'
                 .format(node, state, dep.node))
       entry.state = state
-      _Native.lib().complete_node(self._graph, id(entry), state.type_id)
+      self._native.lib().complete_node(self._graph, id(entry), state.type_id)
     elif type(state) is Waiting:
       for dependency in state.dependencies:
         self._add_dependency(entry, dependency)
@@ -170,7 +131,7 @@ class Graph(object):
     # Any deps which would cause a cycle are added to cyclic_dependencies instead,
     # and ignored except for the purposes of Step execution.
     dependency_entry = self.ensure_entry(dependency)
-    _Native.lib().add_dependency(self._graph, id(node_entry), id(dependency_entry))
+    self._native.lib().add_dependency(self._graph, id(node_entry), id(dependency_entry))
     if dependency_entry in node_entry.dependencies:
       return
 

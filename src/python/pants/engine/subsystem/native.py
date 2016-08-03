@@ -1,0 +1,80 @@
+# coding=utf-8
+# Copyright 2016 Pants project contributors (see CONTRIBUTORS.md).
+# Licensed under the Apache License, Version 2.0 (see LICENSE).
+
+from __future__ import (absolute_import, division, generators, nested_scopes, print_function,
+                        unicode_literals, with_statement)
+
+from pants.binaries.binary_util import BinaryUtil
+from pants.subsystem.subsystem import Subsystem
+from pants.util.memo import memoized_method
+
+
+class Native(object):
+  """Encapsulates fetching a platform specific version of the native portion of the engine.
+  """
+
+  class Factory(Subsystem):
+    options_scope = 'native-engine'
+
+    @classmethod
+    def subsystem_dependencies(cls):
+      return (BinaryUtil.Factory,)
+
+    @classmethod
+    def register_options(cls, register):
+      register('--version', advanced=True, default='0.0.1',
+               help='Native engine version.')
+      register('--supportdir', advanced=True, default='dylib/native-engine',
+               help='Find native engine binaries under this dir. Used as part of the path to lookup '
+                    'the binary with --binary-util-baseurls and --pants-bootstrapdir.')
+
+    def create(self):
+      binary_util = BinaryUtil.Factory.create()
+      options = self.get_options()
+      return Native(binary_util, options.version, options.supportdir)
+
+  def __init__(self, binary_util, version, supportdir):
+    """
+    :param binary_util: The BinaryUtil subsystem instance for binary retrieval.
+    :param version: The binary version of the native engine.
+    :param supportdir: The supportdir for the native engine.
+    """
+    self._binary_util = binary_util
+    self._version = version
+    self._supportdir = supportdir
+
+  @memoized_method
+  def _ffi(self):
+    from cffi import FFI
+
+    ffi = FFI()
+    ffi.cdef(
+        '''
+        struct Graph;
+        typedef uint64_t Node;
+        typedef uint8_t StateType;
+
+        struct Graph* new(StateType);
+        void destroy(struct Graph*);
+        uint64_t len(struct Graph*);
+        void complete_node(struct Graph*, Node, StateType);
+        void add_dependency(struct Graph*, Node, Node);
+        '''
+      )
+    return ffi
+
+  @memoized_method
+  def lib(self):
+    """Load and return the `libgraph` module."""
+    binary = self._binary_util.select_binary(self._supportdir,
+                                            self._version,
+                                            'native-engine')
+    return self._ffi().dlopen(binary)
+
+  def gc(self, cdata, destructor):
+    """Register a method to be called when `cdata` is garbage collected.
+
+    Returns a new reference that should be used in place of `cdata`.
+    """
+    return self._ffi().gc(cdata, destructor)

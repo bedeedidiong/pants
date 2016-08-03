@@ -12,8 +12,6 @@ import time
 from collections import defaultdict
 from contextlib import contextmanager
 
-from cffi import FFI
-
 from pants.base.specs import DescendantAddresses, SiblingAddresses, SingleAddress
 from pants.build_graph.address import Address
 from pants.engine.addressable import Addresses

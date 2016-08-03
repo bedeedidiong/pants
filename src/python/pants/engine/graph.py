@@ -31,8 +31,9 @@ class _Native(object):
     ffi.cdef(
         '''
         struct Graph;
-        struct Graph* graph_new();
-        void graph_destroy(struct Graph*);
+        struct Graph* new();
+        void destroy(struct Graph*);
+        uint64_t len(struct Graph*);
         '''
       )
     return ffi
@@ -41,7 +42,7 @@ class _Native(object):
   @memoized_method
   def lib(cls):
     """Load and return the `libgraph` module."""
-    return cls._ffi().dlopen("./src/rust/graph/libgraph.dylib")
+    return cls._ffi().dlopen('./src/rust/graph/libgraph.dylib')
 
   @classmethod
   def gc(cls, cdata, destructor):
@@ -91,10 +92,10 @@ class Graph(object):
     # A dict of Node->Entry.
     self._nodes = dict()
 
-    self._graph = _Native.gc(_Native.lib().graph_new(), _Native.lib().graph_destroy)
+    self._graph = _Native.gc(_Native.lib().new(), _Native.lib().destroy)
 
   def __len__(self):
-    return len(self._nodes)
+    return _Native.lib().len(self._graph)
 
   def state(self, node):
     entry = self._nodes.get(node, None)

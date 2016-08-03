@@ -1,5 +1,7 @@
 use std::collections::HashMap;
 use std::collections::HashSet;
+use std::collections::VecDeque;
+use std::iter::IntoIterator;
 
 pub type Node = u64;
 pub type State = u64;
@@ -13,7 +15,7 @@ pub struct Entry {
 }
 
 pub struct Graph {
-  default_state: State,
+  empty_state: State,
   nodes: HashMap<Node,Entry>,
 }
 
@@ -22,12 +24,16 @@ impl Graph {
     self.nodes.len() as u64
   }
 
+  fn is_complete(&self, entry: &Entry) -> bool {
+    entry.state == self.empty_state
+  }
+
   fn ensure_entry(&mut self, node: Node) -> &mut Entry {
-    let default_state = self.default_state;
+    let empty_state = self.empty_state;
     self.nodes.entry(node).or_insert_with(||
       Entry {
         node: node,
-        state: default_state,
+        state: empty_state,
         dependencies: HashSet::new(),
         dependents: HashSet::new(),
         cyclic_dependencies: HashSet::new(),
@@ -36,15 +42,61 @@ impl Graph {
   }
 
   fn add_dependency(&mut self, src: Node, dst: Node) {
-    {
-      let src_entry = self.ensure_entry(src);
-      if src_entry.dependencies.contains(&dst) {
-        return;
-      }
-      src_entry.dependencies.insert(dst);
+    if self.ensure_entry(src).dependencies.contains(&dst) {
+      return;
     }
-    let dst_entry = self.ensure_entry(dst);
-    dst_entry.dependents.insert(src);
+
+    if self.detect_cycle(src, dst) {
+      self.ensure_entry(src).cyclic_dependencies.insert(dst);
+    } else {
+      self.ensure_entry(src).dependencies.insert(dst);
+      self.ensure_entry(dst).dependents.insert(src);
+    }
+  }
+
+  /**
+   * Detect whether adding an edge from src to dst would create a cycle.
+   *
+   * Returns true if a cycle would be created by adding an edge from src->dst.
+   */
+  fn detect_cycle(&self, src: Node, dst: Node) -> bool {
+    for node in self.walk(&vec![dst], { |entry| !self.is_complete(entry) }, false) {
+      if node == src {
+        return true;
+      }
+    }
+    return false;
+  }
+
+  /**
+   * Eagerly generates a topologically ordered walk of the graph.
+   *
+   * TODO: Should use an Iterator instead.
+   */
+  fn walk<P>(&self, roots: &Vec<Node>, predicate: P, dependents: bool) -> Vec<Node>
+      where P: Fn(&Entry) -> bool {
+    let mut stack: VecDeque<&Node> = roots.into_iter().collect();
+    let mut walked = HashSet::new();
+    let mut result = Vec::new();
+    while let Some(node) = stack.pop_front() {
+      if walked.contains(&node) {
+        continue;
+      }
+      walked.insert(node);
+
+      match self.nodes.get(&node) {
+        Some(entry) if predicate(entry) => {
+          if dependents {
+            stack.extend(&entry.dependents);
+          } else {
+            stack.extend(&entry.dependencies);
+          }
+          result.push(entry.node);
+        }
+        _ => {},
+      }
+    }
+    result
   }
 }
 
@@ -57,16 +109,16 @@ fn with_graph<F,T>(graph_ptr: *mut Graph, f: F) -> T
 }
 
 #[no_mangle]
-pub extern fn new(default_state: State) -> *const Graph {
+pub extern fn new(empty_state: State) -> *const Graph {
   // allocate on the heap via `Box`.
   let graph =
     Graph {
-      default_state: default_state,
+      empty_state: empty_state,
       nodes: HashMap::new()
     };
   // and return a raw pointer to the boxed value.
   let raw = Box::into_raw(Box::new(graph));
-  println!(">>> rust creating {:?} with default state {}", raw, default_state);
+  println!(">>> rust creating {:?} with default state {}", raw, empty_state);
   raw
 }
 

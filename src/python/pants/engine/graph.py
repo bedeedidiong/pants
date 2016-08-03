@@ -170,10 +170,9 @@ class Graph(object):
     # Any deps which would cause a cycle are added to cyclic_dependencies instead,
     # and ignored except for the purposes of Step execution.
     dependency_entry = self.ensure_entry(dependency)
+    _Native.lib().add_dependency(self._graph, id(node_entry), id(dependency_entry))
     if dependency_entry in node_entry.dependencies:
       return
-
-    _Native.lib().add_dependency(self._graph, id(node_entry), id(dependency_entry))
 
     if self._detect_cycle(node_entry, dependency_entry):
       node_entry.cyclic_dependencies.add(dependency)

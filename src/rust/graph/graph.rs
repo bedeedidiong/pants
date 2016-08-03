@@ -48,6 +48,12 @@ impl Graph {
   }
 }
 
+fn with_graph<F>(graph_ptr: *mut Graph, f: F) where F: Fn(&mut Graph) {
+  let mut graph = unsafe { Box::from_raw(graph_ptr) };
+  f(&mut graph);
+  std::mem::forget(graph);
+}
+
 #[no_mangle]
 pub extern fn new(default_state: State) -> *const Graph {
   // allocate on the heap via `Box`.
@@ -80,15 +86,15 @@ pub extern fn len(graph_ptr: *mut Graph) -> u64 {
 
 #[no_mangle]
 pub extern fn complete_node(graph_ptr: *mut Graph, node: Node, state: State) {
-  let mut graph = unsafe { Box::from_raw(graph_ptr) };
-  graph.ensure_entry(node).state = state;
-  std::mem::forget(graph);
+  with_graph(graph_ptr, |graph| {
+    graph.ensure_entry(node).state = state;
+  })
 }
 
 #[no_mangle]
 pub extern fn add_dependency(graph_ptr: *mut Graph, src: Node, dst: Node) {
-  let mut graph = unsafe { Box::from_raw(graph_ptr) };
-  println!(">>> rust adding dependency from {} to {}", src, dst);
-  graph.add_dependency(src, dst);
-  std::mem::forget(graph);
+  with_graph(graph_ptr, |graph| {
+    println!(">>> rust adding dependency from {} to {}", src, dst);
+    graph.add_dependency(src, dst);
+  })
 }

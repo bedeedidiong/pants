@@ -1,7 +1,6 @@
 use std::collections::HashMap;
 use std::collections::HashSet;
 use std::collections::VecDeque;
-use std::iter::IntoIterator;
 
 pub type Node = u64;
 pub type StateType = u8;
@@ -69,34 +68,51 @@ impl Graph {
   }
 
   /**
-   * Eagerly generates a topologically ordered walk of the graph.
-   *
-   * TODO: Should use an Iterator instead.
+   * Begins a topological Walk from the given roots.
    */
-  fn walk<P>(&self, roots: &Vec<Node>, predicate: P, dependents: bool) -> Vec<Node>
+  fn walk<P>(&self, roots: &Vec<Node>, predicate: P, dependents: bool) -> Walk<P>
       where P: Fn(&Entry) -> bool {
-    let mut stack: VecDeque<&Node> = roots.into_iter().collect();
-    let mut walked = HashSet::new();
-    let mut result = Vec::new();
-    while let Some(node) = stack.pop_front() {
-      if walked.contains(&node) {
+    Walk {
+      dependents: dependents,
+      graph: self,
+      stack: roots.iter().map(|&x| x).collect(),
+      walked: HashSet::new(),
+      predicate: predicate,
+    }
+  }
+}
+
+struct Walk<'a, P: Fn(&Entry) -> bool> {
+  dependents: bool,
+  graph: &'a Graph,
+  stack: VecDeque<Node>,
+  walked: HashSet<Node>,
+  predicate: P,
+}
+
+impl<'a, P: Fn(&Entry) -> bool> Iterator for Walk<'a, P> {
+  type Item = Node;
+
+  fn next(&mut self) -> Option<Node> {
+    while let Some(node) = self.stack.pop_front() {
+      if self.walked.contains(&node) {
         continue;
       }
-      walked.insert(node);
+      self.walked.insert(node);
 
-      match self.nodes.get(&node) {
-        Some(entry) if predicate(entry) => {
-          if dependents {
-            stack.extend(&entry.dependents);
+      match self.graph.nodes.get(&node) {
+        Some(entry) if (self.predicate)(entry) => {
+          if self.dependents {
+            self.stack.extend(&entry.dependents);
           } else {
-            stack.extend(&entry.dependencies);
+            self.stack.extend(&entry.dependencies);
           }
-          result.push(entry.node);
+          return Some(entry.node);
         }
         _ => {},
       }
-    }
-    result
+    };
+    None
   }
 }
 

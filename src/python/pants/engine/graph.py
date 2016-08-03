@@ -100,8 +100,10 @@ class Graph(object):
     self._graph = _Native.gc(_Native.lib().new(id(None)), _Native.lib().destroy)
 
   def __len__(self):
-    _Native.lib().len(self._graph)
-    return len(self._nodes)
+    native_len = _Native.lib().len(self._graph)
+    actual_len = len(self._nodes)
+    assert native_len == actual_len
+    return actual_len
 
   def state(self, node):
     entry = self._nodes.get(node, None)

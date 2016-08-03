@@ -48,10 +48,12 @@ impl Graph {
   }
 }
 
-fn with_graph<F>(graph_ptr: *mut Graph, f: F) where F: Fn(&mut Graph) {
+fn with_graph<F,T>(graph_ptr: *mut Graph, f: F) -> T
+    where F: Fn(&mut Graph) -> T {
   let mut graph = unsafe { Box::from_raw(graph_ptr) };
-  f(&mut graph);
+  let t = f(&mut graph);
   std::mem::forget(graph);
+  t
 }
 
 #[no_mangle]
@@ -78,10 +80,9 @@ pub extern fn destroy(graph_ptr: *mut Graph) {
 
 #[no_mangle]
 pub extern fn len(graph_ptr: *mut Graph) -> u64 {
-  let graph = unsafe { Box::from_raw(graph_ptr) };
-  let len = graph.len();
-  std::mem::forget(graph);
-  len
+  with_graph(graph_ptr, |graph| {
+    graph.len()
+  })
 }
 
 #[no_mangle]

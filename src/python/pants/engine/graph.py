@@ -39,6 +39,7 @@ class _Native(object):
         void destroy(struct Graph*);
         uint64_t len(struct Graph*);
         void complete_node(struct Graph*, Node, State);
+        void add_dependency(struct Graph*, Node, Node);
         '''
       )
     return ffi
@@ -126,7 +127,8 @@ class Graph(object):
                 .format(node, state, dep.node))
       entry.state = state
     elif type(state) is Waiting:
-      self._add_dependencies(entry, state.dependencies)
+      for dependency in state.dependencies:
+        self._add_dependency(entry, dependency)
     else:
       raise State.raise_unrecognized(state)
 
@@ -156,26 +158,26 @@ class Graph(object):
     _Native.lib().complete_node(self._graph, id(entry), id(entry))
     return entry
 
-  def _add_dependencies(self, node_entry, dependencies):
+  def _add_dependency(self, node_entry, dependency):
     """Adds dependency edges from the given src Node to the given dependency Nodes.
 
     Executes cycle detection: if adding one of the given dependencies would create
     a cycle, then the _source_ Node is marked as a Noop with an error indicating the
     cycle path, and the dependencies are not introduced.
     """
-
-    # Add deps. Any deps which would cause a cycle are added to cyclic_dependencies instead,
+    # Any deps which would cause a cycle are added to cyclic_dependencies instead,
     # and ignored except for the purposes of Step execution.
-    for dependency in dependencies:
-      dependency_entry = self.ensure_entry(dependency)
-      if dependency_entry in node_entry.dependencies:
-        continue
+    dependency_entry = self.ensure_entry(dependency)
+    if dependency_entry in node_entry.dependencies:
+      return
 
-      if self._detect_cycle(node_entry, dependency_entry):
-        node_entry.cyclic_dependencies.add(dependency)
-      else:
-        node_entry.dependencies.add(dependency_entry)
-        dependency_entry.dependents.add(node_entry)
+    _Native.lib().add_dependency(self._graph, id(node_entry), id(dependency_entry))
+
+    if self._detect_cycle(node_entry, dependency_entry):
+      node_entry.cyclic_dependencies.add(dependency)
+    else:
+      node_entry.dependencies.add(dependency_entry)
+      dependency_entry.dependents.add(node_entry)
 
   def completed_nodes(self):
     """In linear time, yields the states of any Nodes which have completed."""

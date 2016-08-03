@@ -24,8 +24,7 @@ impl Graph {
 
   fn ensure_entry(&mut self, node: Node) -> &mut Entry {
     let default_state = self.default_state;
-    self.nodes.entry(node).or_insert_with(|| {
-      println!(">>> rust instantiating Entry for {}", node);
+    self.nodes.entry(node).or_insert_with(||
       Entry {
         node: node,
         state: default_state,
@@ -33,7 +32,19 @@ impl Graph {
         dependents: HashSet::new(),
         cyclic_dependencies: HashSet::new(),
       }
-    })
+    )
+  }
+
+  fn add_dependency(&mut self, src: Node, dst: Node) {
+    {
+      let src_entry = self.ensure_entry(src);
+      if src_entry.dependencies.contains(&dst) {
+        return;
+      }
+      src_entry.dependencies.insert(dst);
+    }
+    let dst_entry = self.ensure_entry(dst);
+    dst_entry.dependents.insert(src);
   }
 }
 
@@ -71,5 +82,13 @@ pub extern fn len(graph_ptr: *mut Graph) -> u64 {
 pub extern fn complete_node(graph_ptr: *mut Graph, node: Node, state: State) {
   let mut graph = unsafe { Box::from_raw(graph_ptr) };
   graph.ensure_entry(node).state = state;
+  std::mem::forget(graph);
+}
+
+#[no_mangle]
+pub extern fn add_dependency(graph_ptr: *mut Graph, src: Node, dst: Node) {
+  let mut graph = unsafe { Box::from_raw(graph_ptr) };
+  println!(">>> rust adding dependency from {} to {}", src, dst);
+  graph.add_dependency(src, dst);
   std::mem::forget(graph);
 }

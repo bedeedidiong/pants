@@ -202,6 +202,10 @@ class Graph(object):
 
     invalidated_root_entries = list(entry for entry in self._nodes.values()
                                     if predicate(entry.node, entry.state))
+    invalidated_root_ids = [id(e) for e in invalidated_root_entries]
+    native_invalidated = self._native.lib().invalidate(self._graph,
+                                                       self._native.as_uint64_ptr(invalidated_root_ids),
+                                                       len(invalidated_root_ids))
     invalidated_entries = list(entry for entry in self._walk_entries(invalidated_root_entries,
                                                                      lambda _: True,
                                                                      dependents=True))
@@ -215,6 +219,7 @@ class Graph(object):
       _delete_node(entry)
 
     invalidated_count = len(invalidated_entries)
+    assert native_invalidated == invalidated_count
     return invalidated_count
 
   def walk(self, roots, predicate=None, dependents=False):

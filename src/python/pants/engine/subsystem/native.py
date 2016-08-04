@@ -60,6 +60,7 @@ class Native(object):
         uint64_t len(struct Graph*);
         void complete_node(struct Graph*, Node, StateType);
         void add_dependency(struct Graph*, Node, Node);
+        uint64_t invalidate(struct Graph*, Node*, uint64_t);
         '''
       )
     return ffi
@@ -78,3 +79,9 @@ class Native(object):
     Returns a new reference that should be used in place of `cdata`.
     """
     return self._ffi().gc(cdata, destructor)
+
+  def as_uint64_ptr(self, int_list):
+    array = self._ffi().new('uint64_t[]', len(int_list))
+    for i in range(0, len(int_list)):
+      array[i] = int_list[i]
+    return array

@@ -71,30 +71,57 @@ impl Graph {
    * Begins a topological Walk from the given roots.
    */
   fn walk<P>(&self, roots: &Vec<Node>, predicate: P, dependents: bool) -> Walk<P>
-      where P: Fn(&Entry) -> bool {
+      where P: Fn(&Entry)->bool {
     Walk {
       dependents: dependents,
       graph: self,
-      stack: roots.iter().map(|&x| x).collect(),
+      deque: roots.iter().map(|&x| x).collect(),
       walked: HashSet::new(),
       predicate: predicate,
     }
   }
+
+  /**
+   * Removes the given invalidation roots and their transitive dependents from the Graph.
+   */
+  fn invalidate(&mut self, roots: &Vec<Node>) -> usize {
+    // eagerly collect all Nodes before we begin mutating anything.
+    let nodes: Vec<Node> = self.walk(roots, { |_| true }, true).collect();
+
+    for node in &nodes {
+      // remove the roots from their dependencies' dependents lists.
+      // FIXME: Because the lifetime of each Entry is the same as the lifetime of the entire Graph,
+      // I can't figure out how to iterate over one immutable Entry while mutating a different
+      // mutable Entry... so I clone() here. Perhaps this is completely sane, because what's to say
+      // they're not the same Entry after all? But regardless, less efficient than it could be.
+      for dependency in self.ensure_entry(*node).dependencies.clone() {
+        match self.nodes.get_mut(&dependency) {
+          Some(entry) => { entry.dependents.remove(node); () },
+          _ => {},
+        }
+      }
+
+      // delete each Node
+      self.nodes.remove(node);
+    }
+
+    nodes.len()
+  }
 }
 
-struct Walk<'a, P: Fn(&Entry) -> bool> {
+struct Walk<'a, P: Fn(&Entry)->bool> {
   dependents: bool,
   graph: &'a Graph,
-  stack: VecDeque<Node>,
+  deque: VecDeque<Node>,
   walked: HashSet<Node>,
   predicate: P,
 }
 
-impl<'a, P: Fn(&Entry) -> bool> Iterator for Walk<'a, P> {
+impl<'a, P: Fn(&Entry)->bool> Iterator for Walk<'a, P> {
   type Item = Node;
 
   fn next(&mut self) -> Option<Node> {
-    while let Some(node) = self.stack.pop_front() {
+    while let Some(node) = self.deque.pop_front() {
       if self.walked.contains(&node) {
         continue;
       }
@@ -103,9 +130,9 @@ impl<'a, P: Fn(&Entry) -> bool> Iterator for Walk<'a, P> {
       match self.graph.nodes.get(&node) {
         Some(entry) if (self.predicate)(entry) => {
           if self.dependents {
-            self.stack.extend(&entry.dependents);
+            self.deque.extend(&entry.dependents);
           } else {
-            self.stack.extend(&entry.dependencies);
+            self.deque.extend(&entry.dependencies);
           }
           return Some(entry.node);
         }
@@ -117,10 +144,18 @@ impl<'a, P: Fn(&Entry) -> bool> Iterator for Walk<'a, P> {
 }
 
 fn with_graph<F,T>(graph_ptr: *mut Graph, f: F) -> T
-    where F: Fn(&mut Graph) -> T {
+    where F: Fn(&mut Graph)->T {
   let mut graph = unsafe { Box::from_raw(graph_ptr) };
   let t = f(&mut graph);
   std::mem::forget(graph);
+  t
+}
+
+fn with_nodes<F,T>(nodes_ptr: *mut Node, nodes_len: usize, mut f: F) -> T
+    where F: FnMut(&Vec<Node>)->T {
+  let nodes = unsafe { Vec::from_raw_parts(nodes_ptr, nodes_len, nodes_len) };
+  let t = f(&nodes);
+  std::mem::forget(nodes);
   t
 }
 
@@ -165,5 +200,15 @@ pub extern fn add_dependency(graph_ptr: *mut Graph, src: Node, dst: Node) {
   with_graph(graph_ptr, |graph| {
     println!(">>> rust adding dependency from {} to {}", src, dst);
     graph.add_dependency(src, dst);
+  })
+}
+
+#[no_mangle]
+pub extern fn invalidate(graph_ptr: *mut Graph, roots_ptr: *mut Node, roots_len: u64) -> u64 {
+  with_graph(graph_ptr, |graph| {
+    with_nodes(roots_ptr, roots_len as usize, |roots| {
+      println!(">>> rust invalidating upward from {:?}", roots);
+      graph.invalidate(roots) as u64
+    })
   })
 }

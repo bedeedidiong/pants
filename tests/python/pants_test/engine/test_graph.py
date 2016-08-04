@@ -10,12 +10,19 @@ import unittest
 
 from pants.engine.graph import CompletedNodeException, Graph, IncompleteDependencyException
 from pants.engine.nodes import Return, Waiting
+from pants.engine.subsystem.native import Native
+from pants_test.subsystem.subsystem_util import subsystem_instance
 
 
 # TODO: Expand test coverage here.
 class GraphTest(unittest.TestCase):
   def setUp(self):
-    self.pg = Graph(validator=lambda _: True)  # Allow for string nodes for testing.
+    self.pg = self._mk_graph()
+
+  def _mk_graph(self):
+    with subsystem_instance(Native.Factory) as native_factory:
+      # Override the validator to allow for string nodes for testing.
+      return Graph(validator=lambda _: True, native=native_factory.create())
 
   @classmethod
   def _mk_chain(cls, graph, sequence, states=[Waiting, Return]):
@@ -104,7 +111,7 @@ class GraphTest(unittest.TestCase):
       self.assertFalse(self.pg._nodes)
 
   def test_invalidate_partial(self):
-    comparison_pg = Graph(validator=lambda _: True)
+    comparison_pg = self._mk_graph()
     chain_a = list('ABCDEF')
     chain_b = list('GHIJKL')
 

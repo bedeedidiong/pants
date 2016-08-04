@@ -21,7 +21,6 @@ from pants.engine.nodes import (DependenciesNode, FilesystemNode, Node, Noop, Se
                                 StepContext, TaskNode)
 from pants.engine.objects import Closable
 from pants.engine.selectors import Select, SelectDependencies
-from pants.engine.subsystem.native import Native
 from pants.util.objects import datatype
 
 
@@ -185,6 +184,7 @@ class LocalScheduler(object):
                goals,
                tasks,
                project_tree,
+               native,
                graph_lock=None,
                inline_nodes=True,
                graph_validator=None):
@@ -194,6 +194,7 @@ class LocalScheduler(object):
     :param tasks: A set of (output, input selection clause, task function) triples which
            is used to compute values in the product graph.
     :param project_tree: An instance of ProjectTree for the current build root.
+    :param native: An instance of engine.subsystem.native.Native.
     :param graph_lock: A re-entrant lock to use for guarding access to the internal product Graph
                        instance. Defaults to creating a new threading.RLock().
     :param inline_nodes: Whether to inline execution of `inlineable` Nodes. This improves
@@ -207,7 +208,6 @@ class LocalScheduler(object):
     self._node_builder = NodeBuilder.create(tasks)
 
     self._graph_validator = graph_validator
-    native = Native.Factory.global_instance().create()
     self._product_graph = Graph(native)
     self._product_graph_lock = graph_lock or threading.RLock()
     self._inline_nodes = inline_nodes

@@ -15,19 +15,25 @@ from pants.bin.engine_initializer import EngineInitializer, LegacySymbolTable
 from pants.build_graph.address import Address
 from pants.build_graph.build_file_aliases import BuildFileAliases, TargetMacro
 from pants.build_graph.target import Target
+from pants.engine.subsystem.native import Native
+from pants_test.subsystem.subsystem_util import subsystem_instance
 
 
 class GraphInvalidationTest(unittest.TestCase):
-  def _make_setup_args(self, specs, symbol_table_cls=None):
+  def _make_setup_args(self, specs, **kwargs):
     options = mock.Mock()
     options.target_specs = specs
-    return dict(options=options, symbol_table_cls=symbol_table_cls)
+    kwargs['options'] = options
+    return kwargs
 
   @contextmanager
   def open_scheduler(self, specs, symbol_table_cls=None):
-    kwargs = self._make_setup_args(specs, symbol_table_cls=symbol_table_cls)
-    with EngineInitializer.open_legacy_graph(**kwargs) as triple:
-      yield triple
+    with subsystem_instance(Native.Factory) as native_factory:
+      kwargs = self._make_setup_args(specs,
+                                     native=native_factory.create(),
+                                     symbol_table_cls=symbol_table_cls)
+      with EngineInitializer.open_legacy_graph(**kwargs) as triple:
+        yield triple
 
   def test_invalidate_fsnode(self):
     with self.open_scheduler(['3rdparty/python::']) as (_, _, scheduler):

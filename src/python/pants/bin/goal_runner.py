@@ -20,6 +20,7 @@ from pants.build_graph.build_file_address_mapper import BuildFileAddressMapper
 from pants.build_graph.build_file_parser import BuildFileParser
 from pants.build_graph.mutable_build_graph import MutableBuildGraph
 from pants.engine.round_engine import RoundEngine
+from pants.engine.subsystem.native import Native
 from pants.goal.context import Context
 from pants.goal.goal import Goal
 from pants.goal.run_tracker import RunTracker
@@ -204,7 +205,7 @@ class GoalRunner(object):
   @classmethod
   def subsystems(cls):
     # Subsystems used outside of any task.
-    return {SourceRootConfig, Reporting, Reproducer, RunTracker, PantsDaemonLauncher.Factory}
+    return {SourceRootConfig, Reporting, Reproducer, RunTracker, PantsDaemonLauncher.Factory, Native.Factory}
 
   def _execute_engine(self):
     workdir = self._context.options.for_global_scope().pants_workdir

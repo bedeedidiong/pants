@@ -405,7 +405,7 @@ class ExampleTable(SymbolTable):
             'inferred_scala': ScalaInferredDepsSources}
 
 
-def setup_json_scheduler(build_root, inline_nodes=True):
+def setup_json_scheduler(build_root, native, inline_nodes=True):
   """Return a build graph and scheduler configured for BLD.json files under the given build root.
 
   :rtype :class:`pants.engine.scheduler.LocalScheduler`
@@ -512,6 +512,7 @@ def setup_json_scheduler(build_root, inline_nodes=True):
   return LocalScheduler(goals,
                         tasks,
                         project_tree,
+                        native,
                         graph_lock=None,
                         inline_nodes=inline_nodes,
                         graph_validator=GraphValidator(symbol_table_cls))

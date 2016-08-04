@@ -15,17 +15,20 @@ from pants.engine.engine import LocalSerialEngine
 from pants.engine.nodes import (ConflictingProducersError, DependenciesNode, Return, SelectNode,
                                 Throw)
 from pants.engine.selectors import Select, SelectDependencies, SelectVariant
+from pants.engine.subsystem.native import Native
 from pants.util.contextutil import temporary_dir
 from pants_test.engine.examples.planners import (ApacheThriftJavaConfiguration, Classpath, GenGoal,
                                                  Jar, JavaSources, ThriftSources,
                                                  setup_json_scheduler)
+from pants_test.subsystem.subsystem_util import subsystem_instance
 
 
 class SchedulerTest(unittest.TestCase):
   def setUp(self):
     build_root = os.path.join(os.path.dirname(__file__), 'examples', 'scheduler_inputs')
     self.spec_parser = CmdLineSpecParser(build_root)
-    self.scheduler = setup_json_scheduler(build_root, inline_nodes=False)
+    with subsystem_instance(Native.Factory) as native_factory:
+      self.scheduler = setup_json_scheduler(build_root, native_factory.create(), inline_nodes=False)
     self.pg = self.scheduler.product_graph
     self.engine = LocalSerialEngine(self.scheduler)
 

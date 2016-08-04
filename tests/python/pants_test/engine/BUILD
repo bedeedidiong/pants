@@ -174,9 +174,11 @@ python_tests(
   coverage=['pants.engine.nodes', 'pants.engine.scheduler'],
   dependencies=[
     'src/python/pants/build_graph',
-    'tests/python/pants_test/engine/examples:planners',
+    'src/python/pants/engine/subsystem:native',
     'src/python/pants/engine:engine',
     'src/python/pants/engine:scheduler',
+    'tests/python/pants_test/engine/examples:planners',
+    'tests/python/pants_test/subsystem:subsystem_utils',
   ]
 )
 
@@ -185,12 +187,14 @@ python_tests(
   sources=['scheduler_test_base.py'],
   dependencies=[
     'src/python/pants/base:project_tree',
+    'src/python/pants/engine/subsystem:native',
     'src/python/pants/engine:engine',
     'src/python/pants/engine:fs',
     'src/python/pants/engine:parser',
     'src/python/pants/engine:scheduler',
     'src/python/pants/engine:storage',
     'src/python/pants/util:dirutil',
+    'tests/python/pants_test/subsystem:subsystem_utils',
   ]
 )
 

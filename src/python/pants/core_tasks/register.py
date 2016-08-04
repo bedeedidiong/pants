@@ -22,16 +22,8 @@ from pants.core_tasks.run_prep_command import (RunBinaryPrepCommand, RunCompileP
 from pants.core_tasks.substitute_aliased_targets import SubstituteAliasedTargets
 from pants.core_tasks.targets_help import TargetsHelp
 from pants.core_tasks.what_changed import WhatChanged
-from pants.engine.subsystem.native import Native
 from pants.goal.goal import Goal
 from pants.goal.task_registrar import TaskRegistrar as task
-
-
-# TODO: this is the wrong place for this.
-def global_subsystems():
-  return {
-      Native.Factory,
-    }
 
 
 def register_goals():

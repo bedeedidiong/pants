@@ -58,7 +58,7 @@ class Graph(object):
     self._nodes = dict()
     # A native underlying graph.
     self._native = native
-    self._graph = native.gc(native.lib().new(Waiting.type_id), native.lib().destroy)
+    self._graph = native.gc(native.lib().graph_create(Waiting.type_id), native.lib().graph_destroy)
 
   def __len__(self):
     native_len = self._native.lib().len(self._graph)

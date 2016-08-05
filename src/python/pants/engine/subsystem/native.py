@@ -49,14 +49,15 @@ class Native(object):
     from cffi import FFI
 
     ffi = FFI()
+    # TODO: This definition is coupled to callers: should memoize it there.
     ffi.cdef(
         '''
         struct Graph;
         typedef uint64_t Node;
         typedef uint8_t StateType;
 
-        struct Graph* new(StateType);
-        void destroy(struct Graph*);
+        struct Graph* graph_create(StateType);
+        void graph_destroy(struct Graph*);
         uint64_t len(struct Graph*);
         void complete_node(struct Graph*, Node, StateType);
         void add_dependency(struct Graph*, Node, Node);

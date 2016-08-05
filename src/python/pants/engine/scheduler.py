@@ -322,8 +322,6 @@ class LocalScheduler(object):
   def _complete_step(self, node, step_result):
     """Given a StepResult for the given Node, complete the step."""
     result = step_result.state
-    # Update the Node's state in the graph.
-    self._product_graph.update_state(node, result)
 
   def invalidate_files(self, filenames):
     """Calls `Graph.invalidate_files()` against an internal product Graph instance."""
@@ -348,12 +346,35 @@ class LocalScheduler(object):
       outstanding = {}
       # Node entries that might need to have Steps created (after any outstanding Step returns).
       candidates = set(self._product_graph.ensure_entry(r) for r in execution_request.roots)
-      execution = self._product_graph.execution(list(candidates))
+      #execution = self._product_graph.execution(list(candidates))
 
       # Yield nodes that are ready, and then compute new ones.
       scheduling_iterations = 0
       start_time = time.time()
       while True:
+        # Finalize any Steps that completed during the prior round.
+        completed = []
+        for node_entry, value in outstanding.items()[:]:
+          step, promise = value
+          if not promise.is_complete():
+            continue
+          # The step has completed; see whether the Node is completed.
+          outstanding.pop(node_entry)
+          self._product_graph.update_state(node_entry.node, promise.get().state)
+          if node_entry.is_complete:
+            # The Node is completed: mark any of its dependents as candidates for Steps.
+            completed.append(node_entry)
+            candidates.update(d for d in node_entry.dependents)
+          else:
+            # Waiting on dependencies.
+            incomplete_deps = [d for d in node_entry.dependencies if not d.is_complete]
+            if incomplete_deps:
+              # Mark incomplete deps as candidates for Steps.
+              candidates.update(incomplete_deps)
+            else:
+              # All deps are already completed: mark this Node as a candidate for another step.
+              candidates.add(node_entry)
+
         # Create Steps for candidates that are ready to run, and not already running.
         ready = dict()
         for candidate in list(candidates):
@@ -371,6 +392,8 @@ class LocalScheduler(object):
             ready[candidate] = candidate_step
           candidates.discard(candidate)
 
+        #self._product_graph.execution_next(execution, ready.keys(), [])
+
         if not ready and not outstanding:
           # Finished.
           assert len(candidates) == 0, (
@@ -380,27 +403,6 @@ class LocalScheduler(object):
         yield ready.values()
         scheduling_iterations += 1
         outstanding.update(ready)
-
-        # Finalize completed Steps.
-        for node_entry, value in outstanding.items()[:]:
-          step, promise = value
-          if not promise.is_complete():
-            continue
-          # The step has completed; see whether the Node is completed.
-          outstanding.pop(node_entry)
-          self._complete_step(step.node, promise.get())
-          if node_entry.is_complete:
-            # The Node is completed: mark any of its dependents as candidates for Steps.
-            candidates.update(d for d in node_entry.dependents)
-          else:
-            # Waiting on dependencies.
-            incomplete_deps = [d for d in node_entry.dependencies if not d.is_complete]
-            if incomplete_deps:
-              # Mark incomplete deps as candidates for Steps.
-              candidates.update(incomplete_deps)
-            else:
-              # All deps are already completed: mark this Node as a candidate for another step.
-              candidates.add(node_entry)
 
       logger.debug(
         'ran %s scheduling iterations in %f seconds. '

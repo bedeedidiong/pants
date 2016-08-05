@@ -353,6 +353,7 @@ class LocalScheduler(object):
       start_time = time.time()
       while True:
         # Finalize any Steps that completed during the prior round.
+        waiting = []
         completed = []
         for node_entry, value in outstanding.items()[:]:
           step, promise = value
@@ -367,6 +368,7 @@ class LocalScheduler(object):
             candidates.update(d for d in node_entry.dependents)
           else:
             # Waiting on dependencies.
+            waiting.append(node_entry) 
             incomplete_deps = [d for d in node_entry.dependencies if not d.is_complete]
             if incomplete_deps:
               # Mark incomplete deps as candidates for Steps.
@@ -392,8 +394,13 @@ class LocalScheduler(object):
             ready[candidate] = candidate_step
           candidates.discard(candidate)
 
-        native_ready = self._product_graph.execution_next(execution, ready.keys(), completed)
-        print('>>> native code thinks {} are ready'.format(len(native_ready)))
+        native_ready = self._product_graph.execution_next(execution, waiting, completed)
+        assert set(ready) == set(native_ready), (
+          "ready and native ready sets mismatch:\n  {}\n  {}".format(
+            sorted(id(r) for r in ready),
+            sorted(id(r) for r in native_ready),
+          )
+        )
 
         if not ready and not outstanding:
           # Finished.

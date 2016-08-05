@@ -35,7 +35,7 @@ impl Graph {
   }
 
   fn is_complete(&self, node: Node) -> bool {
-    self.nodes.get(&node).map(|e| e.state == self.empty_state).unwrap_or(false)
+    self.nodes.get(&node).map(|e| e.state != self.empty_state).unwrap_or(false)
   }
 
   fn is_complete_entry(&self, entry: &Entry) -> bool {
@@ -47,12 +47,12 @@ impl Graph {
    * are complete.
    */
   fn is_ready(&self, node: Node) -> bool {
-    !self.is_complete(node) && (
+    (!self.is_complete(node)) && (
       self.nodes.get(&node).map(|e| {
-        e.dependencies
-          .iter()
-          .all(|d| { self.is_complete(*d) })
-      }).unwrap_or(true)
+          e.dependencies
+            .iter()
+            .all(|d| { self.is_complete(*d) })
+        }).unwrap_or(true)
     )
   }
 
@@ -241,6 +241,7 @@ impl Execution {
     for (&node, &state) in completed.iter().zip(completed_states.iter()) {
       let entry = graph.ensure_entry(node);
       self.candidates.extend(&entry.dependents);
+      println!(">>> rust batch completing {} with {}", node, state);
       entry.state = state;
     }
 
@@ -263,18 +264,22 @@ impl Execution {
             self.candidates.insert(node);
           }
         },
-        _ => {},
+        _ => {
+          // Node has no deps yet: mark as a candidate for another step.
+          self.candidates.insert(node);
+        },
       };
     }
 
     // Move all ready candidates to the ready set.
     let (ready_candidates, next_candidates) =
       self.candidates.iter().map(|c| *c).partition(|&c| graph.is_ready(c));
+    println!(">>> partitioned to {:?} and {:?}", ready_candidates, next_candidates);
     self.candidates = next_candidates;
+
+    // Update references in the raw ready struct.
     self.ready.clear();
     self.ready.extend(ready_candidates);
-
-    // Update references in the raw ready struct and return it.
     with_raw_nodes(self.ready_raw, |rr| {
       rr.nodes_ptr = self.ready.as_mut_ptr();
       rr.nodes_len = self.ready.len() as u64;
@@ -350,6 +355,7 @@ pub extern fn len(graph_ptr: *mut Graph) -> u64 {
 #[no_mangle]
 pub extern fn complete_node(graph_ptr: *mut Graph, node: Node, state: StateType) {
   with_graph(graph_ptr, |graph| {
+    println!(">>> rust completing {} with {}", node, state);
     graph.ensure_entry(node).state = state;
   })
 }
@@ -397,7 +403,7 @@ pub extern fn execution_next(
       with_nodes(waiting_ptr, waiting_len as usize, |waiting| {
         with_nodes(completed_ptr, completed_len as usize, |completed| {
           with_states(states_ptr, states_len as usize, |states| {
-            println!(">>> rust continuing execution after {:?} completed", completed);
+            println!(">>> rust continuing execution with {:?} waiting and {:?} completed", waiting, completed);
             execution.next(graph, waiting, completed, states);
             execution.ready_raw
           })

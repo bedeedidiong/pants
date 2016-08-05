@@ -72,11 +72,11 @@ class Native(object):
 
         struct Execution* execution_create(Node*, uint64_t);
         void execution_destroy(struct Execution*);
-        struct RawNodes* execution_next(struct Graph*,
-                                        struct Execution*,
-                                        Node*, uint64_t,
-                                        Node*, uint64_t,
-                                        StateType*, uint64_t);
+        RawNodes* execution_next(struct Graph*,
+                                 struct Execution*,
+                                 Node*, uint64_t,
+                                 Node*, uint64_t,
+                                 StateType*, uint64_t);
         '''
       )
     return ffi

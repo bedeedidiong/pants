@@ -346,7 +346,7 @@ class LocalScheduler(object):
       outstanding = {}
       # Node entries that might need to have Steps created (after any outstanding Step returns).
       candidates = set(self._product_graph.ensure_entry(r) for r in execution_request.roots)
-      #execution = self._product_graph.execution(list(candidates))
+      execution = self._product_graph.execution(list(candidates))
 
       # Yield nodes that are ready, and then compute new ones.
       scheduling_iterations = 0
@@ -392,7 +392,8 @@ class LocalScheduler(object):
             ready[candidate] = candidate_step
           candidates.discard(candidate)
 
-        #self._product_graph.execution_next(execution, ready.keys(), [])
+        native_ready = self._product_graph.execution_next(execution, ready.keys(), completed)
+        print('>>> native code thinks {} are ready'.format(len(native_ready)))
 
         if not ready and not outstanding:
           # Finished.

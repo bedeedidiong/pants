@@ -54,8 +54,9 @@ class Graph(object):
 
   def __init__(self, native, validator=None):
     self._validator = validator or Node.validate_node
-    # A dict of Node->Entry.
+    # A dict of Node->Entry, and a dict of id(Entry)->Node
     self._nodes = dict()
+    self._node_ids = dict()
     # A native underlying graph.
     self._native = native
     self._graph = native.gc(native.lib().graph_create(Waiting.type_id), native.lib().graph_destroy)
@@ -119,7 +120,12 @@ class Graph(object):
     if not entry:
       self._validator(node)
       self._nodes[node] = entry = self.Entry(node)
+      self._node_ids[id(entry)] = entry
     return entry
+
+  def _entry_for_id(self, node_id):
+    """Returns the Entry for the given node id, which must exist"""
+    return self._node_ids[node_id]
 
   def _add_dependency(self, node_entry, dependency):
     """Adds dependency edges from the given src Node to the given dependency Nodes.
@@ -195,6 +201,7 @@ class Graph(object):
 
     def _delete_node(entry):
       actual_entry = self._nodes.pop(entry.node)
+      self._node_ids.pop(id(actual_entry))
       assert entry is actual_entry
 
     def all_predicate(node, state): return True
@@ -277,7 +284,7 @@ class Graph(object):
                                                   waiting, len(waiting_entries),
                                                   completed, len(completed_entries),
                                                   states, len(completed_entries))
-    return [self.ensure_entry(n) for n in self._native.unpack(raw_nodes.nodes_ptr, raw_nodes.nodes_len)]
+    return [self._entry_for_id(n) for n in self._native.unpack(raw_nodes[0].nodes_ptr, raw_nodes[0].nodes_len)]
 
   def trace(self, root):
     """Yields a stringified 'stacktrace' starting from the given failed root.

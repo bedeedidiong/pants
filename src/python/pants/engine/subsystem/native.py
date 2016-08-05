@@ -53,15 +53,30 @@ class Native(object):
     ffi.cdef(
         '''
         struct Graph;
+        struct Execution;
         typedef uint64_t Node;
         typedef uint8_t StateType;
 
+        typedef struct {
+          Node*    nodes_ptr;
+          uint64_t nodes_len;
+        } RawNodes;
+
         struct Graph* graph_create(StateType);
         void graph_destroy(struct Graph*);
+
         uint64_t len(struct Graph*);
         void complete_node(struct Graph*, Node, StateType);
         void add_dependency(struct Graph*, Node, Node);
         uint64_t invalidate(struct Graph*, Node*, uint64_t);
+
+        struct Execution* execution_create(Node*, uint64_t);
+        void execution_destroy(struct Execution*);
+        struct RawNodes* execution_next(struct Graph*,
+                                        struct Execution*,
+                                        Node*, uint64_t,
+                                        Node*, uint64_t,
+                                        StateType*, uint64_t);
         '''
       )
     return ffi
@@ -83,6 +98,12 @@ class Native(object):
 
   def as_uint64_ptr(self, int_list):
     array = self._ffi().new('uint64_t[]', len(int_list))
+    for i in range(0, len(int_list)):
+      array[i] = int_list[i]
+    return array
+
+  def as_uint8_ptr(self, int_list):
+    array = self._ffi().new('uint8_t[]', len(int_list))
     for i in range(0, len(int_list)):
       array[i] = int_list[i]
     return array

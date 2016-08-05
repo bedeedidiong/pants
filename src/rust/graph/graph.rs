@@ -1,6 +1,4 @@
-use std::collections::HashMap;
-use std::collections::HashSet;
-use std::collections::VecDeque;
+use std::collections::{HashMap, HashSet, VecDeque};
 
 pub type Node = u64;
 pub type StateType = u8;
@@ -192,7 +190,7 @@ pub struct RawNodes {
 pub struct Execution {
   candidates: HashSet<Node>,
   ready: Vec<Node>,
-  ready_raw: Box<RawNodes>,
+  ready_raw: *mut RawNodes,
 }
 
 impl Execution {
@@ -204,16 +202,21 @@ impl Execution {
       Execution {
         candidates: roots.iter().map(|n| *n).collect(),
         ready: Vec::new(),
-        ready_raw: Box::new(
-          RawNodes {
-            nodes_ptr: Vec::new().as_mut_ptr(),
-            nodes_len: 0,
-          }
-        ),
+        ready_raw:
+          Box::into_raw(
+            Box::new(
+              RawNodes {
+                nodes_ptr: Vec::new().as_mut_ptr(),
+                nodes_len: 0,
+              }
+            )
+          ),
       };
     // replace the soon-to-be-invalid nodes_ptr with a live pointer.
     // TODO: determine the syntax for instantiating and using the Vec inline above.
-    execution.ready_raw.nodes_ptr = execution.ready.as_mut_ptr();
+    with_raw_nodes(execution.ready_raw, |rr| {
+      rr.nodes_ptr = execution.ready.as_mut_ptr()
+    });
     execution
   }
 
@@ -272,8 +275,10 @@ impl Execution {
     self.ready.extend(ready_candidates);
 
     // Update references in the raw ready struct and return it.
-    self.ready_raw.nodes_ptr = self.ready.as_mut_ptr();
-    self.ready_raw.nodes_len = self.ready.len() as u64;
+    with_raw_nodes(self.ready_raw, |rr| {
+      rr.nodes_ptr = self.ready.as_mut_ptr();
+      rr.nodes_len = self.ready.len() as u64;
+    });
   }
 }
 
@@ -284,6 +289,14 @@ fn with_execution<F,T>(execution_ptr: *mut Execution, mut f: F) -> T
   let mut execution = unsafe { Box::from_raw(execution_ptr) };
   let t = f(&mut execution);
   std::mem::forget(execution);
+  t
+}
+
+fn with_raw_nodes<F,T>(raw_nodes_ptr: *mut RawNodes, mut f: F) -> T
+    where F: FnMut(&mut RawNodes)->T {
+  let mut raw_nodes = unsafe { Box::from_raw(raw_nodes_ptr) };
+  let t = f(&mut raw_nodes);
+  std::mem::forget(raw_nodes);
   t
 }
 
@@ -360,13 +373,11 @@ pub extern fn invalidate(graph_ptr: *mut Graph, roots_ptr: *mut Node, roots_len:
 }
 
 #[no_mangle]
-pub extern fn execution_create(graph_ptr: *mut Graph, roots_ptr: *mut Node, roots_len: u64) -> *const Execution {
-  with_graph(graph_ptr, |graph| {
-    with_nodes(roots_ptr, roots_len as usize, |roots| {
-      println!(">>> rust beginning execution from {:?}", roots);
-      // create on the heap, and return a raw pointer to the boxed value.
-      Box::into_raw(Box::new(Execution::new(roots)))
-    })
+pub extern fn execution_create(roots_ptr: *mut Node, roots_len: u64) -> *const Execution {
+  with_nodes(roots_ptr, roots_len as usize, |roots| {
+    println!(">>> rust beginning execution from {:?}", roots);
+    // create on the heap, and return a raw pointer to the boxed value.
+    Box::into_raw(Box::new(Execution::new(roots)))
   })
 }
 
@@ -388,10 +399,21 @@ pub extern fn execution_next(
           with_states(states_ptr, states_len as usize, |states| {
             println!(">>> rust continuing execution after {:?} completed", completed);
             execution.next(graph, waiting, completed, states);
-            Box::into_raw(execution.ready_raw)
+            execution.ready_raw
           })
         })
       })
     })
   })
+}
+
+#[no_mangle]
+pub extern fn execution_destroy(execution_ptr: *mut Execution) {
+  // convert the raw pointers back to Boxes (without `forget`ing them) in order to cause them
+  // to be destroyed at the end of this function.
+  println!(">>> rust destroying {:?}", execution_ptr);
+  unsafe {
+    let execution = Box::from_raw(execution_ptr);
+    let _ = Box::from_raw(execution.ready_raw);
+  };
 }

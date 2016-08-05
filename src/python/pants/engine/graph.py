@@ -259,6 +259,26 @@ class Graph(object):
 
       yield entry
 
+  def execution(self, root_entries):
+    roots_ptr = self._native.as_uint64_ptr([id(r) for r in root_entries])
+    execution = self._native.gc(self._native.lib().execution_create(roots_ptr, len(root_entries)),
+                                self._native.lib().execution_destroy)
+    return execution
+
+  def execution_next(self, execution, waiting_entries, completed_entries):
+    # Prepare arrays for each input.
+    waiting = self._native.as_uint64_ptr([id(e) for e in waiting_entries])
+    completed = self._native.as_uint64_ptr([id(e) for e in completed_entries])
+    states = self._native.as_uint8_ptr([e.state.type_id for e in completed_entries])
+
+    # Convert the output struct to an array.
+    raw_nodes = self._native.lib().execution_next(self._graph,
+                                                  execution,
+                                                  waiting, len(waiting_entries),
+                                                  completed, len(completed_entries),
+                                                  states, len(completed_entries))
+    return [self.ensure_entry(n) for n in self._native.unpack(raw_nodes.nodes_ptr, raw_nodes.nodes_len)]
+
   def trace(self, root):
     """Yields a stringified 'stacktrace' starting from the given failed root.
 

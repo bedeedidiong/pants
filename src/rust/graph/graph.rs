@@ -25,6 +25,13 @@ pub struct Graph {
 }
 
 impl Graph {
+  fn new(empty_state: StateType) -> Graph {
+    Graph {
+      empty_state: empty_state,
+      nodes: HashMap::new()
+    }
+  }
+
   fn len(&self) -> u64 {
     self.nodes.len() as u64
   }
@@ -45,8 +52,8 @@ impl Graph {
     !self.is_complete(node) && (
       self.nodes.get(&node).map(|e| {
         e.dependencies
-          .into_iter()
-          .all(|d| { self.is_complete(d) })
+          .iter()
+          .all(|d| { self.is_complete(*d) })
       }).unwrap_or(true)
     )
   }
@@ -131,23 +138,6 @@ impl Graph {
 
     nodes.len()
   }
-
-  /**
-   * Begins an Execution from the given root Nodes.
-   */
-  fn execution(&self, roots: &Vec<Node>) -> Execution {
-    let ready = Vec::new();
-    Execution {
-      candidates: roots.iter().map(|n| *n).collect(),
-      ready: ready,
-      ready_raw: Box::new(
-        RawNodes {
-          nodes_ptr: ready.as_mut_ptr(),
-          nodes_len: ready.len() as u64,
-        }
-      ),
-    }
-  }
 }
 
 /**
@@ -207,6 +197,27 @@ pub struct Execution {
 
 impl Execution {
   /**
+   * Begins an Execution from the given root Nodes.
+   */
+  fn new(roots: &Vec<Node>) -> Execution {
+    let mut execution =
+      Execution {
+        candidates: roots.iter().map(|n| *n).collect(),
+        ready: Vec::new(),
+        ready_raw: Box::new(
+          RawNodes {
+            nodes_ptr: Vec::new().as_mut_ptr(),
+            nodes_len: 0,
+          }
+        ),
+      };
+    // replace the soon-to-be-invalid nodes_ptr with a live pointer.
+    // TODO: determine the syntax for instantiating and using the Vec inline above.
+    execution.ready_raw.nodes_ptr = execution.ready.as_mut_ptr();
+    execution
+  }
+
+  /**
    * Continues execution after the waiting Nodes given Nodes have completed with the given states.
    */
   fn next(
@@ -226,7 +237,7 @@ impl Execution {
     // Complete any completed Nodes and mark their dependents as candidates.
     for (&node, &state) in completed.iter().zip(completed_states.iter()) {
       let entry = graph.ensure_entry(node);
-      self.candidates.extend(entry.dependents);
+      self.candidates.extend(&entry.dependents);
       entry.state = state;
     }
 
@@ -236,8 +247,9 @@ impl Execution {
         Some(entry) => {
           // If all dependencies of the Node are completed, the Node itself is a candidate.
           let incomplete_deps: Vec<Node> =
-            graph.ensure_entry(node).dependencies
-              .into_iter()
+            entry.dependencies
+              .iter()
+              .map(|d| *d)
               .filter(|&d| { !graph.is_complete(d) })
               .collect();
           if incomplete_deps.len() > 0 {
@@ -254,7 +266,7 @@ impl Execution {
 
     // Move all ready candidates to the ready set.
     let (ready_candidates, next_candidates) =
-      self.candidates.into_iter().partition(|&c| graph.is_ready(c));
+      self.candidates.iter().map(|c| *c).partition(|&c| graph.is_ready(c));
     self.candidates = next_candidates;
     self.ready.clear();
     self.ready.extend(ready_candidates);
@@ -267,8 +279,8 @@ impl Execution {
 
 /** TODO: Make the next four functions generic in the type being operated on? */
 
-fn with_execution<F,T>(execution_ptr: *mut Execution, f: F) -> T
-    where F: Fn(&mut Execution)->T {
+fn with_execution<F,T>(execution_ptr: *mut Execution, mut f: F) -> T
+    where F: FnMut(&mut Execution)->T {
   let mut execution = unsafe { Box::from_raw(execution_ptr) };
   let t = f(&mut execution);
   std::mem::forget(execution);
@@ -301,14 +313,8 @@ fn with_states<F,T>(states_ptr: *mut StateType, states_len: usize, mut f: F) -> 
 
 #[no_mangle]
 pub extern fn graph_create(empty_state: StateType) -> *const Graph {
-  // allocate on the heap via `Box`.
-  let graph =
-    Graph {
-      empty_state: empty_state,
-      nodes: HashMap::new()
-    };
-  // and return a raw pointer to the boxed value.
-  let raw = Box::into_raw(Box::new(graph));
+  // allocate on the heap via `Box` and return a raw pointer to the boxed value.
+  let raw = Box::into_raw(Box::new(Graph::new(empty_state)));
   println!(">>> rust creating {:?} with default state {}", raw, empty_state);
   raw
 }
@@ -359,7 +365,7 @@ pub extern fn execution_create(graph_ptr: *mut Graph, roots_ptr: *mut Node, root
     with_nodes(roots_ptr, roots_len as usize, |roots| {
       println!(">>> rust beginning execution from {:?}", roots);
       // create on the heap, and return a raw pointer to the boxed value.
-      Box::into_raw(Box::new(graph.execution(roots)))
+      Box::into_raw(Box::new(Execution::new(roots)))
     })
   })
 }

@@ -224,24 +224,16 @@ class LocalScheduler(object):
         fh.write(line)
         fh.write('\n')
 
-  def _create_step(self, node_entry):
-    """Creates a Step and Promise with the currently available dependencies of the given Node.
-
-    If the dependencies of a Node are not available, returns None.
-
-    TODO: Content addressing node and its dependencies should only happen if node is cacheable
-      or in a multi-process environment.
-    """
+  def _create_step(self, node_entry, dependencies, cyclic_dependencies):
+    """Creates a Step and Promise with the given dependencies of the given Node."""
     Node.validate_node(node_entry.node)
 
     # See whether all of the dependencies for the node are available.
     deps = dict()
-    for dep_entry in node_entry.dependencies:
-      if not dep_entry.is_complete:
-        return None
+    for dep_entry in dependencies:
       deps[dep_entry.node] = dep_entry.state
     # Additionally, include Noops for any dependencies that were cyclic.
-    for dep in node_entry.cyclic_dependencies:
+    for dep in cyclic_dependencies:
       deps[dep] = Noop.cycle(node_entry.node, dep)
 
     # Ready.
@@ -366,18 +358,12 @@ class LocalScheduler(object):
 
         # Create Steps for candidates that are ready to run, and not already running.
         ready = {}
-        for candidate in self._product_graph.execution_next(execution, waiting, completed):
+        steps = self._product_graph.execution_next(execution, waiting, completed)
+        for candidate, deps, cyclic_deps in steps:
           if candidate in outstanding:
             # Node is still a candidate, but is currently running.
             continue
-          if candidate.is_complete:
-            # Node has already completed.
-            continue
-          # Create a step if all dependencies are available; otherwise, can assume they are
-          # outstanding, and will cause this Node to become a candidate again later.
-          candidate_step = self._create_step(candidate)
-          if candidate_step is not None:
-            ready[candidate] = candidate_step
+          ready[candidate] = self._create_step(candidate, deps, cyclic_deps)
 
         if not ready and not outstanding:
           # Finished.

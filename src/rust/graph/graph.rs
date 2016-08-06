@@ -5,13 +5,16 @@ pub type StateType = u8;
 
 /**
  * An Entry and its adjacencies.
+ *
+ * The dependencies and cyclic_dependencies sets are stored as vectors in order to expose
+ * them more easily via the C API, but they should never contain dupes.
  */
 pub struct Entry {
   node: Node,
   state: StateType,
-  dependencies: HashSet<Node>,
+  dependencies: Vec<Node>,
   dependents: HashSet<Node>,
-  cyclic_dependencies: HashSet<Node>,
+  cyclic_dependencies: Vec<Node>,
 }
 
 /**
@@ -62,23 +65,56 @@ impl Graph {
       Entry {
         node: node,
         state: empty_state,
-        dependencies: HashSet::new(),
+        dependencies: Vec::new(),
         dependents: HashSet::new(),
-        cyclic_dependencies: HashSet::new(),
+        cyclic_dependencies: Vec::new(),
       }
     )
   }
 
-  fn add_dependency(&mut self, src: Node, dst: Node) {
-    if self.ensure_entry(src).dependencies.contains(&dst) {
-      return;
-    }
+  /**
+   * Completes a Node with the given state type.
+   *
+   * Preserves the invariant that completed Nodes may only depend on other completed Nodes.
+   */
+  fn complete_node(&mut self, node: Node, state: StateType) {
+    assert!(
+      self.is_ready(node),
+      "Node {} is already completed, or has incomplete deps.",
+      node,
+    );
+    self.ensure_entry(node).state = state;
+  }
 
-    if self.detect_cycle(src, dst) {
-      self.ensure_entry(src).cyclic_dependencies.insert(dst);
-    } else {
-      self.ensure_entry(src).dependencies.insert(dst);
-      self.ensure_entry(dst).dependents.insert(src);
+  /**
+   * Adds the given dst Nodes as dependencies of the src Node.
+   *
+   * Preserves the invariant that completed Nodes may only depend on other completed Nodes.
+   */
+  fn add_dependencies(&mut self, src: Node, dsts: &Vec<Node>) {
+    let empty_state = self.empty_state;
+    let (state, dependencies) = {
+      let entry = self.ensure_entry(src);
+      (entry.state, entry.dependencies.to_owned())
+    };
+    assert!(
+      state == empty_state,
+      "Node {} is already completed, and may not have new dependencies added: {:?}",
+      src,
+      dsts,
+    );
+
+    for &dst in dsts {
+      if dependencies.contains(&dst) {
+        continue;
+      }
+
+      if self.detect_cycle(src, dst) {
+        self.ensure_entry(src).cyclic_dependencies.push(dst);
+      } else {
+        self.ensure_entry(src).dependencies.push(dst);
+        self.ensure_entry(dst).dependents.insert(src);
+      }
     }
   }
 
@@ -177,11 +213,22 @@ impl<'a, P: Fn(&Entry)->bool> Iterator for Walk<'a, P> {
 }
 
 /**
- * A primitive struct to allow a list of Nodes to be directly exposed to python.
+ * Primitive structs to allow a list of steps to be directly exposed to python.
+ *
+ * NB: This is marked `allow(dead_code)` because it's only used in the C API.
  */
-pub struct RawNodes {
-  nodes_ptr: *mut Node,
-  nodes_len: u64,
+#[allow(dead_code)]
+pub struct RawStep {
+  node: Node,
+  dependencies_ptr: *mut Node,
+  dependencies_len: u64,
+  cyclic_dependencies_ptr: *mut Node,
+  cyclic_dependencies_len: u64,
+}
+
+pub struct RawSteps {
+  steps_ptr: *mut RawStep,
+  steps_len: u64,
 }
 
 /**
@@ -189,8 +236,8 @@ pub struct RawNodes {
  */
 pub struct Execution {
   candidates: HashSet<Node>,
-  ready: Vec<Node>,
-  ready_raw: *mut RawNodes,
+  ready: Vec<RawStep>,
+  ready_raw: *mut RawSteps,
 }
 
 impl Execution {
@@ -205,17 +252,17 @@ impl Execution {
         ready_raw:
           Box::into_raw(
             Box::new(
-              RawNodes {
-                nodes_ptr: Vec::new().as_mut_ptr(),
-                nodes_len: 0,
+              RawSteps {
+                steps_ptr: Vec::new().as_mut_ptr(),
+                steps_len: 0,
               }
             )
           ),
       };
     // replace the soon-to-be-invalid nodes_ptr with a live pointer.
     // TODO: determine the syntax for instantiating and using the Vec inline above.
-    with_raw_nodes(execution.ready_raw, |rr| {
-      rr.nodes_ptr = execution.ready.as_mut_ptr()
+    with_raw_steps(execution.ready_raw, |rr| {
+      rr.steps_ptr = execution.ready.as_mut_ptr()
     });
     execution
   }
@@ -257,7 +304,7 @@ impl Execution {
               .filter(|&d| { !graph.is_complete(d) })
               .collect();
           if incomplete_deps.len() > 0 {
-            // Mark incomplete deps as candidates for Steps.
+            // Mark incomplete deps as candidates for steps.
             self.candidates.extend(incomplete_deps);
           } else {
             // All deps are already completed: mark this Node as a candidate for another step.
@@ -277,12 +324,23 @@ impl Execution {
     println!(">>> partitioned to {:?} and {:?}", ready_candidates, next_candidates);
     self.candidates = next_candidates;
 
-    // Update references in the raw ready struct.
+    // Create a new set of steps in the raw ready struct.
     self.ready.clear();
-    self.ready.extend(ready_candidates);
-    with_raw_nodes(self.ready_raw, |rr| {
-      rr.nodes_ptr = self.ready.as_mut_ptr();
-      rr.nodes_len = self.ready.len() as u64;
+    self.ready.extend(
+      ready_candidates.iter().map(|&node| {
+        let entry = graph.ensure_entry(node);
+        RawStep {
+          node: node,
+          dependencies_ptr: entry.dependencies.as_mut_ptr(),
+          dependencies_len: entry.dependencies.len() as u64,
+          cyclic_dependencies_ptr: entry.cyclic_dependencies.as_mut_ptr(),
+          cyclic_dependencies_len: entry.cyclic_dependencies.len() as u64,
+        }
+      })
+    );
+    with_raw_steps(self.ready_raw, |rr| {
+      rr.steps_ptr = self.ready.as_mut_ptr();
+      rr.steps_len = self.ready.len() as u64;
     });
   }
 }
@@ -297,11 +355,11 @@ fn with_execution<F,T>(execution_ptr: *mut Execution, mut f: F) -> T
   t
 }
 
-fn with_raw_nodes<F,T>(raw_nodes_ptr: *mut RawNodes, mut f: F) -> T
-    where F: FnMut(&mut RawNodes)->T {
-  let mut raw_nodes = unsafe { Box::from_raw(raw_nodes_ptr) };
-  let t = f(&mut raw_nodes);
-  std::mem::forget(raw_nodes);
+fn with_raw_steps<F,T>(raw_steps_ptr: *mut RawSteps, mut f: F) -> T
+    where F: FnMut(&mut RawSteps)->T {
+  let mut raw_steps = unsafe { Box::from_raw(raw_steps_ptr) };
+  let t = f(&mut raw_steps);
+  std::mem::forget(raw_steps);
   t
 }
 
@@ -356,15 +414,17 @@ pub extern fn len(graph_ptr: *mut Graph) -> u64 {
 pub extern fn complete_node(graph_ptr: *mut Graph, node: Node, state: StateType) {
   with_graph(graph_ptr, |graph| {
     println!(">>> rust completing {} with {}", node, state);
-    graph.ensure_entry(node).state = state;
+    graph.complete_node(node, state);
   })
 }
 
 #[no_mangle]
-pub extern fn add_dependency(graph_ptr: *mut Graph, src: Node, dst: Node) {
+pub extern fn add_dependencies(graph_ptr: *mut Graph, src: Node, dsts_ptr: *mut Node, dsts_len: u64) {
   with_graph(graph_ptr, |graph| {
-    println!(">>> rust adding dependency from {} to {}", src, dst);
-    graph.add_dependency(src, dst);
+    with_nodes(dsts_ptr, dsts_len as usize, |dsts| {
+      println!(">>> rust adding dependencies from {} to {:?}", src, dsts);
+      graph.add_dependencies(src, dsts);
+    })
   })
 }
 
@@ -397,7 +457,7 @@ pub extern fn execution_next(
   completed_len: u64,
   states_ptr: *mut StateType,
   states_len: u64,
-) -> *const RawNodes {
+) -> *const RawSteps {
   with_graph(graph_ptr, |graph| {
     with_execution(execution_ptr, |execution| {
       with_nodes(waiting_ptr, waiting_len as usize, |waiting| {

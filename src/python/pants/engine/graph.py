@@ -27,19 +27,12 @@ class Graph(object):
     Equality for this object is intentionally `identity` for efficiency purposes: structural
     equality can be implemented by comparing the result of the `structure` method.
     """
-    __slots__ = ('node', 'state', 'dependencies', 'dependents', 'cyclic_dependencies')
+    __slots__ = ('node', 'state')
 
     def __init__(self, node):
       self.node = node
       # The computed value for a Node: if a Node hasn't been computed yet, it will be None.
       self.state = None
-      # Sets of dependency/dependent Entry objects.
-      self.dependencies = set()
-      self.dependents = set()
-      # Illegal/cyclic dependency Nodes. We prevent cyclic dependencies from being introduced into the
-      # dependencies/dependents lists themselves, but track them independently in order to provide
-      # context specific error messages when they are introduced.
-      self.cyclic_dependencies = set()
 
     @property
     def is_complete(self):
@@ -76,24 +69,16 @@ class Graph(object):
   def update_state(self, node, state):
     """Updates the Node with the given State, creating any Nodes which do not already exist."""
     entry = self.ensure_entry(node)
-    if entry.state is not None:
-      # It's important not to allow state changes on completed Nodes, because that invariant
-      # is used in cycle detection to avoid walking into completed Nodes.
-      raise CompletedNodeException('Node {} is already completed:\n  {}\n  {}'
-                                   .format(node, entry.state, state))
-
     if type(state) in [Return, Throw, Noop]:
       # Validate that a completed Node depends only on other completed Nodes.
-      for dep in entry.dependencies:
-        if dep.state is None:
-          raise IncompleteDependencyException(
-              'Cannot complete {} with {} while it has an incomplete dep:\n  {}'
-                .format(node, state, dep.node))
       entry.state = state
       self._native.lib().complete_node(self._graph, id(entry), state.type_id)
     elif type(state) is Waiting:
-      for dependency in state.dependencies:
-        self._add_dependency(entry, dependency)
+      dep_entries = [self.ensure_entry(d) for d in state.dependencies]
+      deps_ptr = self._native.as_uint64_ptr([id(e) for e in dep_entries])
+      self._native.lib().add_dependencies(self._graph,
+                                          id(entry),
+                                          deps_ptr, len(dep_entries))
     else:
       raise State.raise_unrecognized(state)
 
@@ -126,26 +111,6 @@ class Graph(object):
   def _entry_for_id(self, node_id):
     """Returns the Entry for the given node id, which must exist"""
     return self._node_ids[node_id]
-
-  def _add_dependency(self, node_entry, dependency):
-    """Adds dependency edges from the given src Node to the given dependency Nodes.
-
-    Executes cycle detection: if adding one of the given dependencies would create
-    a cycle, then the _source_ Node is marked as a Noop with an error indicating the
-    cycle path, and the dependencies are not introduced.
-    """
-    # Any deps which would cause a cycle are added to cyclic_dependencies instead,
-    # and ignored except for the purposes of Step execution.
-    dependency_entry = self.ensure_entry(dependency)
-    self._native.lib().add_dependency(self._graph, id(node_entry), id(dependency_entry))
-    if dependency_entry in node_entry.dependencies:
-      return
-
-    if self._detect_cycle(node_entry, dependency_entry):
-      node_entry.cyclic_dependencies.add(dependency)
-    else:
-      node_entry.dependencies.add(dependency_entry)
-      dependency_entry.dependents.add(node_entry)
 
   def completed_nodes(self):
     """In linear time, yields the states of any Nodes which have completed."""
@@ -278,13 +243,24 @@ class Graph(object):
     completed = self._native.as_uint64_ptr([id(e) for e in completed_entries])
     states = self._native.as_uint8_ptr([e.state.type_id for e in completed_entries])
 
-    # Convert the output struct to an array.
-    raw_nodes = self._native.lib().execution_next(self._graph,
+    # Convert the output Steps to a list of tuples of Node, dependencies, cyclic_dependencies.
+    raw_steps = self._native.lib().execution_next(self._graph,
                                                   execution,
                                                   waiting, len(waiting_entries),
                                                   completed, len(completed_entries),
                                                   states, len(completed_entries))
-    return [self._entry_for_id(n) for n in self._native.unpack(raw_nodes[0].nodes_ptr, raw_nodes[0].nodes_len)]
+    def entries(ptr, count):
+      return [self._entry_for_id(d) for d in self._native.unpack(ptr, count)]
+
+    def unpack_step(step):
+      return (
+        self._entry_for_id(step.node),
+        entries(step.dependencies_ptr, step.dependencies_len),
+        entries(step.cyclic_dependencies_ptr, step.cyclic_dependencies_len),
+      )
+
+    return [unpack_step(s)
+            for s in self._native.unpack(raw_steps[0].steps_ptr, raw_steps[0].steps_len)]
 
   def trace(self, root):
     """Yields a stringified 'stacktrace' starting from the given failed root.

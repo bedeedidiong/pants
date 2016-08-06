@@ -58,21 +58,29 @@ class Native(object):
         typedef uint8_t StateType;
 
         typedef struct {
-          Node*    nodes_ptr;
-          uint64_t nodes_len;
-        } RawNodes;
+          Node node;
+          Node*    dependencies_ptr;
+          uint64_t dependencies_len;
+          Node*    cyclic_dependencies_ptr;
+          uint64_t cyclic_dependencies_len;
+        } RawStep;
+
+        typedef struct {
+          RawStep* steps_ptr;
+          uint64_t steps_len;
+        } RawSteps;
 
         struct Graph* graph_create(StateType);
         void graph_destroy(struct Graph*);
 
         uint64_t len(struct Graph*);
         void complete_node(struct Graph*, Node, StateType);
-        void add_dependency(struct Graph*, Node, Node);
+        void add_dependencies(struct Graph*, Node, Node*, uint64_t);
         uint64_t invalidate(struct Graph*, Node*, uint64_t);
 
         struct Execution* execution_create(Node*, uint64_t);
         void execution_destroy(struct Execution*);
-        RawNodes* execution_next(struct Graph*,
+        RawSteps* execution_next(struct Graph*,
                                  struct Execution*,
                                  Node*, uint64_t,
                                  Node*, uint64_t,

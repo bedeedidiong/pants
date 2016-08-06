@@ -319,10 +319,6 @@ class LocalScheduler(object):
     with self._product_graph_lock:
       return {root: self._product_graph.state(root) for root in execution_request.roots}
 
-  def _complete_step(self, node, step_result):
-    """Given a StepResult for the given Node, complete the step."""
-    result = step_result.state
-
   def invalidate_files(self, filenames):
     """Calls `Graph.invalidate_files()` against an internal product Graph instance."""
     with self._product_graph_lock:
@@ -345,8 +341,7 @@ class LocalScheduler(object):
       # A dict from Node entry to a possibly executing Step. Only one Step exists for a Node at a time.
       outstanding = {}
       # Node entries that might need to have Steps created (after any outstanding Step returns).
-      candidates = set(self._product_graph.ensure_entry(r) for r in execution_request.roots)
-      execution = self._product_graph.execution(list(candidates))
+      execution = self._product_graph.execution([self._product_graph.ensure_entry(r) for r in execution_request.roots])
 
       # Yield nodes that are ready, and then compute new ones.
       scheduling_iterations = 0
@@ -365,48 +360,27 @@ class LocalScheduler(object):
           if node_entry.is_complete:
             # The Node is completed: mark any of its dependents as candidates for Steps.
             completed.append(node_entry)
-            candidates.update(d for d in node_entry.dependents)
           else:
             # Waiting on dependencies.
             waiting.append(node_entry) 
-            incomplete_deps = [d for d in node_entry.dependencies if not d.is_complete]
-            if incomplete_deps:
-              # Mark incomplete deps as candidates for Steps.
-              candidates.update(incomplete_deps)
-            else:
-              # All deps are already completed: mark this Node as a candidate for another step.
-              candidates.add(node_entry)
 
         # Create Steps for candidates that are ready to run, and not already running.
-        ready = dict()
-        for candidate in list(candidates):
+        ready = {}
+        for candidate in self._product_graph.execution_next(execution, waiting, completed):
           if candidate in outstanding:
             # Node is still a candidate, but is currently running.
             continue
           if candidate.is_complete:
             # Node has already completed.
-            candidates.discard(candidate)
             continue
           # Create a step if all dependencies are available; otherwise, can assume they are
           # outstanding, and will cause this Node to become a candidate again later.
           candidate_step = self._create_step(candidate)
           if candidate_step is not None:
             ready[candidate] = candidate_step
-          candidates.discard(candidate)
-
-        native_ready = self._product_graph.execution_next(execution, waiting, completed)
-        assert set(ready) == set(native_ready), (
-          "ready and native ready sets mismatch:\n  {}\n  {}".format(
-            sorted(id(r) for r in ready),
-            sorted(id(r) for r in native_ready),
-          )
-        )
 
         if not ready and not outstanding:
           # Finished.
-          assert len(candidates) == 0, (
-              "Candidates list was not empty: {} entries.".format(len(candidates))
-          )
           break
         yield ready.values()
         scheduling_iterations += 1

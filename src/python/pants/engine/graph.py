@@ -61,11 +61,8 @@ class Graph(object):
 
   def add_dependencies(self, node_entry, dependencies):
     """Adds the given dependencies for the given entry, which must be in the Waiting state."""
-    dep_entries = [self.ensure_entry(d) for d in dependencies]
-    deps_ptr = self._native.as_uint64_ptr([id(e) for e in dep_entries])
-    self._native.lib.add_dependencies(self._graph,
-                                      id(node_entry),
-                                      deps_ptr, len(dep_entries))
+    deps = [id(self.ensure_entry(d)) for d in dependencies]
+    self._native.lib.add_dependencies(self._graph, id(node_entry), deps, len(deps))
 
   def ensure_entry(self, node):
     """Returns the Entry for the given Node, creating it if it does not already exist."""
@@ -145,7 +142,7 @@ class Graph(object):
                                     if predicate(entry.node, entry.state))
     invalidated_root_ids = [id(e) for e in invalidated_root_entries]
     native_invalidated = self._native.lib.invalidate(self._graph,
-                                                     self._native.as_uint64_ptr(invalidated_root_ids),
+                                                     invalidated_root_ids,
                                                      len(invalidated_root_ids))
     invalidated_entries = list(entry for entry in self._walk_entries(invalidated_root_entries,
                                                                      lambda _: True,
@@ -201,23 +198,23 @@ class Graph(object):
       yield entry
 
   def execution(self, root_entries):
-    roots_ptr = self._native.as_uint64_ptr([id(r) for r in root_entries])
-    execution = self._native.gc(self._native.lib.execution_create(roots_ptr, len(root_entries)),
+    roots = [id(r) for r in root_entries]
+    execution = self._native.gc(self._native.lib.execution_create(roots, len(roots)),
                                 self._native.lib.execution_destroy)
     return execution
 
   def execution_next(self, execution, waiting_entries, completed_entries):
     # Prepare arrays for each input.
-    waiting = self._native.as_uint64_ptr([id(e) for e in waiting_entries])
-    completed = self._native.as_uint64_ptr([id(e) for e in completed_entries])
-    states = self._native.as_uint8_ptr([e.state.type_id for e in completed_entries])
+    waiting = [id(e) for e in waiting_entries]
+    completed = [id(e) for e in completed_entries]
+    states = [e.state.type_id for e in completed_entries]
 
     # Convert the output Steps to a list of tuples of Node, dependencies, cyclic_dependencies.
     raw_steps = self._native.lib.execution_next(self._graph,
                                                 execution,
-                                                waiting, len(waiting_entries),
-                                                completed, len(completed_entries),
-                                                states, len(completed_entries))
+                                                waiting, len(waiting),
+                                                completed, len(completed),
+                                                states, len(states))
     def entries(ptr, count):
       return [self._entry_for_id(ptr[i]) for i in range(0, count)]
 

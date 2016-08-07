@@ -111,15 +111,3 @@ class Native(object):
   def unpack(self, cdata_ptr, count):
     """Given a pointer representing an array, and its count of entries, return a list."""
     return self._ffi.unpack(cdata_ptr, count)
-
-  def as_uint64_ptr(self, int_list):
-    array = self._ffi.new('uint64_t[]', len(int_list))
-    for i in range(0, len(int_list)):
-      array[i] = int_list[i]
-    return array
-
-  def as_uint8_ptr(self, int_list):
-    array = self._ffi.new('uint8_t[]', len(int_list))
-    for i in range(0, len(int_list)):
-      array[i] = int_list[i]
-    return array

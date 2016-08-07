@@ -288,7 +288,6 @@ impl Execution {
     for (&node, &state) in completed.iter().zip(completed_states.iter()) {
       let entry = graph.ensure_entry(node);
       self.candidates.extend(&entry.dependents);
-      println!(">>> rust batch completing {} with {}", node, state);
       entry.state = state;
     }
 
@@ -321,7 +320,6 @@ impl Execution {
     // Move all ready candidates to the ready set.
     let (ready_candidates, next_candidates) =
       self.candidates.iter().map(|c| *c).partition(|&c| graph.is_ready(c));
-    println!(">>> partitioned to {:?} and {:?}", ready_candidates, next_candidates);
     self.candidates = next_candidates;
 
     // Create a new set of steps in the raw ready struct.
@@ -391,7 +389,6 @@ fn with_states<F,T>(states_ptr: *mut StateType, states_len: usize, mut f: F) -> 
 pub extern fn graph_create(empty_state: StateType) -> *const Graph {
   // allocate on the heap via `Box` and return a raw pointer to the boxed value.
   let raw = Box::into_raw(Box::new(Graph::new(empty_state)));
-  println!(">>> rust creating {:?} with default state {}", raw, empty_state);
   raw
 }
 
@@ -399,7 +396,6 @@ pub extern fn graph_create(empty_state: StateType) -> *const Graph {
 pub extern fn graph_destroy(graph_ptr: *mut Graph) {
   // convert the raw pointer back to a Box (without `forget`ing it) in order to cause it
   // to be destroyed at the end of this function.
-  println!(">>> rust destroying {:?}", graph_ptr);
   let _ = unsafe { Box::from_raw(graph_ptr) };
 }
 
@@ -413,7 +409,6 @@ pub extern fn len(graph_ptr: *mut Graph) -> u64 {
 #[no_mangle]
 pub extern fn complete_node(graph_ptr: *mut Graph, node: Node, state: StateType) {
   with_graph(graph_ptr, |graph| {
-    println!(">>> rust completing {} with {}", node, state);
     graph.complete_node(node, state);
   })
 }
@@ -422,7 +417,6 @@ pub extern fn complete_node(graph_ptr: *mut Graph, node: Node, state: StateType)
 pub extern fn add_dependencies(graph_ptr: *mut Graph, src: Node, dsts_ptr: *mut Node, dsts_len: u64) {
   with_graph(graph_ptr, |graph| {
     with_nodes(dsts_ptr, dsts_len as usize, |dsts| {
-      println!(">>> rust adding dependencies from {} to {:?}", src, dsts);
       graph.add_dependencies(src, dsts);
     })
   })
@@ -432,7 +426,6 @@ pub extern fn add_dependencies(graph_ptr: *mut Graph, src: Node, dsts_ptr: *mut 
 pub extern fn invalidate(graph_ptr: *mut Graph, roots_ptr: *mut Node, roots_len: u64) -> u64 {
   with_graph(graph_ptr, |graph| {
     with_nodes(roots_ptr, roots_len as usize, |roots| {
-      println!(">>> rust invalidating upward from {:?}", roots);
       graph.invalidate(roots) as u64
     })
   })
@@ -441,7 +434,6 @@ pub extern fn invalidate(graph_ptr: *mut Graph, roots_ptr: *mut Node, roots_len:
 #[no_mangle]
 pub extern fn execution_create(roots_ptr: *mut Node, roots_len: u64) -> *const Execution {
   with_nodes(roots_ptr, roots_len as usize, |roots| {
-    println!(">>> rust beginning execution from {:?}", roots);
     // create on the heap, and return a raw pointer to the boxed value.
     Box::into_raw(Box::new(Execution::new(roots)))
   })
@@ -463,7 +455,6 @@ pub extern fn execution_next(
       with_nodes(waiting_ptr, waiting_len as usize, |waiting| {
         with_nodes(completed_ptr, completed_len as usize, |completed| {
           with_states(states_ptr, states_len as usize, |states| {
-            println!(">>> rust continuing execution with {:?} waiting and {:?} completed", waiting, completed);
             execution.next(graph, waiting, completed, states);
             execution.ready_raw
           })
@@ -477,7 +468,6 @@ pub extern fn execution_next(
 pub extern fn execution_destroy(execution_ptr: *mut Execution) {
   // convert the raw pointers back to Boxes (without `forget`ing them) in order to cause them
   // to be destroyed at the end of this function.
-  println!(">>> rust destroying {:?}", execution_ptr);
   unsafe {
     let execution = Box::from_raw(execution_ptr);
     let _ = Box::from_raw(execution.ready_raw);

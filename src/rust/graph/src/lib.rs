@@ -73,20 +73,6 @@ impl Graph {
   }
 
   /**
-   * Completes a Node with the given state type.
-   *
-   * Preserves the invariant that completed Nodes may only depend on other completed Nodes.
-   */
-  fn complete_node(&mut self, node: Node, state: StateType) {
-    assert!(
-      self.is_ready(node),
-      "Node {} is already completed, or has incomplete deps.",
-      node,
-    );
-    self.ensure_entry(node).state = state;
-  }
-
-  /**
    * Adds the given dst Nodes as dependencies of the src Node.
    *
    * Preserves the invariant that completed Nodes may only depend on other completed Nodes.
@@ -286,6 +272,11 @@ impl Execution {
 
     // Complete any completed Nodes and mark their dependents as candidates.
     for (&node, &state) in completed.iter().zip(completed_states.iter()) {
+      assert!(
+        graph.is_ready(node),
+        "Node {} is already completed, or has incomplete deps.",
+        node,
+      );
       let entry = graph.ensure_entry(node);
       self.candidates.extend(&entry.dependents);
       entry.state = state;
@@ -403,13 +394,6 @@ pub extern fn graph_destroy(graph_ptr: *mut Graph) {
 pub extern fn len(graph_ptr: *mut Graph) -> u64 {
   with_graph(graph_ptr, |graph| {
     graph.len()
-  })
-}
-
-#[no_mangle]
-pub extern fn complete_node(graph_ptr: *mut Graph, node: Node, state: StateType) {
-  with_graph(graph_ptr, |graph| {
-    graph.complete_node(node, state);
   })
 }
 

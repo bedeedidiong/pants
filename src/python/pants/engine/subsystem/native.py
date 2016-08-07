@@ -74,7 +74,6 @@ class Native(object):
         void graph_destroy(struct Graph*);
 
         uint64_t len(struct Graph*);
-        void complete_node(struct Graph*, Node, StateType);
         void add_dependencies(struct Graph*, Node, Node*, uint64_t);
         uint64_t invalidate(struct Graph*, Node*, uint64_t);
 

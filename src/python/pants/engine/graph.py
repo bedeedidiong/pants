@@ -39,11 +39,7 @@ class Graph(object):
       return self.state is not None
 
     def structure(self):
-      return (self.node,
-              self.state,
-              {d.node for d in self.dependencies},
-              {d.node for d in self.dependents},
-              self.cyclic_dependencies)
+      return (self.node, self.state)
 
   def __init__(self, native, validator=None):
     self._validator = validator or Node.validate_node
@@ -71,29 +67,13 @@ class Graph(object):
                                       id(node_entry),
                                       deps_ptr, len(dep_entries))
 
-  def _detect_cycle(self, src, dest):
-    """Detect whether adding an edge from src to dest would create a cycle.
-
-    :param src: Source entry: must exist in the graph.
-    :param dest: Destination entry: must exist in the graph.
-
-    Returns True if a cycle would be created by adding an edge from src->dest.
-    """
-    # We disallow adding new edges outbound from completed Nodes, and no completed Node can have
-    # a path to an uncompleted Node. Thus, we can truncate our search for cycles at any completed
-    # Node.
-    is_not_completed = lambda e: e.state is None
-    for entry in self._walk_entries([dest], entry_predicate=is_not_completed):
-      if entry is src:
-        return True
-    return False
-
   def ensure_entry(self, node):
     """Returns the Entry for the given Node, creating it if it does not already exist."""
     entry = self._nodes.get(node, None)
     if not entry:
       self._validator(node)
-      self._nodes[node] = entry = self.Entry(node)
+      entry = self.Entry(node)
+      self._nodes[node] = entry
       self._node_ids[id(entry)] = entry
     return entry
 

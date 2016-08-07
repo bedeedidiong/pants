@@ -55,10 +55,7 @@ class Graph(object):
     self._graph = native.gc(native.lib.graph_create(Waiting.type_id), native.lib.graph_destroy)
 
   def __len__(self):
-    native_len = self._native.lib.len(self._graph)
-    actual_len = len(self._nodes)
-    assert native_len == actual_len
-    return actual_len
+    return self._native.lib.len(self._graph)
 
   def state(self, node):
     entry = self._nodes.get(node, None)
@@ -66,21 +63,13 @@ class Graph(object):
       return None
     return entry.state
 
-  def update_state(self, node, state):
-    """Updates the Node with the given State, creating any Nodes which do not already exist."""
-    entry = self.ensure_entry(node)
-    if type(state) in [Return, Throw, Noop]:
-      # Validate that a completed Node depends only on other completed Nodes.
-      entry.state = state
-      self._native.lib.complete_node(self._graph, id(entry), state.type_id)
-    elif type(state) is Waiting:
-      dep_entries = [self.ensure_entry(d) for d in state.dependencies]
-      deps_ptr = self._native.as_uint64_ptr([id(e) for e in dep_entries])
-      self._native.lib.add_dependencies(self._graph,
-                                          id(entry),
-                                          deps_ptr, len(dep_entries))
-    else:
-      raise State.raise_unrecognized(state)
+  def add_dependencies(self, node_entry, dependencies):
+    """Adds the given dependencies for the given entry, which must be in the Waiting state."""
+    dep_entries = [self.ensure_entry(d) for d in dependencies]
+    deps_ptr = self._native.as_uint64_ptr([id(e) for e in dep_entries])
+    self._native.lib.add_dependencies(self._graph,
+                                      id(node_entry),
+                                      deps_ptr, len(dep_entries))
 
   def _detect_cycle(self, src, dest):
     """Detect whether adding an edge from src to dest would create a cycle.
@@ -250,17 +239,14 @@ class Graph(object):
                                                 completed, len(completed_entries),
                                                 states, len(completed_entries))
     def entries(ptr, count):
-      return [self._entry_for_id(d) for d in self._native.unpack(ptr, count)]
+      return [self._entry_for_id(ptr[i]) for i in range(0, count)]
 
-    def unpack_step(step):
-      return (
+    for step in self._native.unpack(raw_steps[0].steps_ptr, raw_steps[0].steps_len):
+      yield (
         self._entry_for_id(step.node),
         entries(step.dependencies_ptr, step.dependencies_len),
         entries(step.cyclic_dependencies_ptr, step.cyclic_dependencies_len),
       )
-
-    return [unpack_step(s)
-            for s in self._native.unpack(raw_steps[0].steps_ptr, raw_steps[0].steps_len)]
 
   def trace(self, root):
     """Yields a stringified 'stacktrace' starting from the given failed root.

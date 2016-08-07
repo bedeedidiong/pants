@@ -18,7 +18,7 @@ from pants.engine.fs import PathGlobs
 from pants.engine.graph import Graph
 from pants.engine.isolated_process import ProcessExecutionNode, SnapshotNode
 from pants.engine.nodes import (DependenciesNode, FilesystemNode, Node, Noop, SelectNode,
-                                StepContext, TaskNode)
+                                StepContext, TaskNode, Waiting)
 from pants.engine.objects import Closable
 from pants.engine.selectors import Select, SelectDependencies
 from pants.util.objects import datatype
@@ -346,19 +346,22 @@ class LocalScheduler(object):
           step, promise = value
           if not promise.is_complete():
             continue
-          # The step has completed; see whether the Node is completed.
           outstanding.pop(node_entry)
-          self._product_graph.update_state(node_entry.node, promise.get().state)
-          if node_entry.is_complete:
-            # The Node is completed: mark any of its dependents as candidates for Steps.
-            completed.append(node_entry)
-          else:
+
+          # The step has completed; see whether the Node is completed.
+          state = promise.get().state
+          if type(state) is Waiting:
             # Waiting on dependencies.
-            waiting.append(node_entry) 
+            self._product_graph.add_dependencies(node_entry, state.dependencies)
+            waiting.append(node_entry)
+          else:
+            # The Node is completed.
+            node_entry.state = state
+            completed.append(node_entry)
 
         # Create Steps for candidates that are ready to run, and not already running.
-        ready = {}
         steps = self._product_graph.execution_next(execution, waiting, completed)
+        ready = {}
         for candidate, deps, cyclic_deps in steps:
           if candidate in outstanding:
             # Node is still a candidate, but is currently running.

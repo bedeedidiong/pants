@@ -8,6 +8,5 @@ python_library(
     '3rdparty/python:cffi',
     'src/python/pants/binaries:binary_util',
     'src/python/pants/subsystem:subsystem',
-    'src/python/pants/util:memo',
   ],
 )

@@ -7,7 +7,6 @@ from __future__ import (absolute_import, division, generators, nested_scopes, pr
 
 from pants.binaries.binary_util import BinaryUtil
 from pants.subsystem.subsystem import Subsystem
-from pants.util.memo import memoized_property
 
 
 class Native(object):
@@ -44,57 +43,63 @@ class Native(object):
     self._version = version
     self._supportdir = supportdir
 
-  @memoized_property
+    self._ffi_field = None
+    self._lib_field = None
+
+  @property
   def _ffi(self):
-    from cffi import FFI
+    if self._ffi_field is None:
+      from cffi import FFI
 
-    ffi = FFI()
-    # TODO: This definition is coupled to callers: should memoize it there.
-    ffi.cdef(
-        '''
-        struct Graph;
-        struct Execution;
-        typedef uint64_t Node;
-        typedef uint8_t StateType;
+      self._ffi_field = FFI()
+      # TODO: This definition is coupled to callers: should memoize it there.
+      self._ffi_field.cdef(
+          '''
+          struct Graph;
+          struct Execution;
+          typedef uint64_t Node;
+          typedef uint8_t StateType;
 
-        typedef struct {
-          Node node;
-          Node*    dependencies_ptr;
-          uint64_t dependencies_len;
-          Node*    cyclic_dependencies_ptr;
-          uint64_t cyclic_dependencies_len;
-        } RawStep;
+          typedef struct {
+            Node node;
+            Node*    dependencies_ptr;
+            uint64_t dependencies_len;
+            Node*    cyclic_dependencies_ptr;
+            uint64_t cyclic_dependencies_len;
+          } RawStep;
 
-        typedef struct {
-          RawStep* steps_ptr;
-          uint64_t steps_len;
-        } RawSteps;
+          typedef struct {
+            RawStep* steps_ptr;
+            uint64_t steps_len;
+          } RawSteps;
 
-        struct Graph* graph_create(StateType);
-        void graph_destroy(struct Graph*);
+          struct Graph* graph_create(StateType);
+          void graph_destroy(struct Graph*);
 
-        uint64_t len(struct Graph*);
-        void add_dependencies(struct Graph*, Node, Node*, uint64_t);
-        uint64_t invalidate(struct Graph*, Node*, uint64_t);
+          uint64_t len(struct Graph*);
+          void add_dependencies(struct Graph*, Node, Node*, uint64_t);
+          uint64_t invalidate(struct Graph*, Node*, uint64_t);
 
-        struct Execution* execution_create(Node*, uint64_t);
-        void execution_destroy(struct Execution*);
-        RawSteps* execution_next(struct Graph*,
-                                 struct Execution*,
-                                 Node*, uint64_t,
-                                 Node*, uint64_t,
-                                 StateType*, uint64_t);
-        '''
-      )
-    return ffi
+          struct Execution* execution_create(Node*, uint64_t);
+          void execution_destroy(struct Execution*);
+          RawSteps* execution_next(struct Graph*,
+                                  struct Execution*,
+                                  Node*, uint64_t,
+                                  Node*, uint64_t,
+                                  StateType*, uint64_t);
+          '''
+        )
+    return self._ffi_field
 
-  @memoized_property
+  @property
   def lib(self):
     """Load and return the `libgraph` module."""
-    binary = self._binary_util.select_binary(self._supportdir,
-                                            self._version,
-                                            'native-engine')
-    return self._ffi.dlopen(binary)
+    if self._lib_field is None:
+      binary = self._binary_util.select_binary(self._supportdir,
+                                              self._version,
+                                              'native-engine')
+      self._lib_field = self._ffi.dlopen(binary)
+    return self._lib_field
 
   def gc(self, cdata, destructor):
     """Register a method to be called when `cdata` is garbage collected.

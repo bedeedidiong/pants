@@ -52,10 +52,10 @@ class Graph(object):
     self._node_ids = dict()
     # A native underlying graph.
     self._native = native
-    self._graph = native.gc(native.lib().graph_create(Waiting.type_id), native.lib().graph_destroy)
+    self._graph = native.gc(native.lib.graph_create(Waiting.type_id), native.lib.graph_destroy)
 
   def __len__(self):
-    native_len = self._native.lib().len(self._graph)
+    native_len = self._native.lib.len(self._graph)
     actual_len = len(self._nodes)
     assert native_len == actual_len
     return actual_len
@@ -72,11 +72,11 @@ class Graph(object):
     if type(state) in [Return, Throw, Noop]:
       # Validate that a completed Node depends only on other completed Nodes.
       entry.state = state
-      self._native.lib().complete_node(self._graph, id(entry), state.type_id)
+      self._native.lib.complete_node(self._graph, id(entry), state.type_id)
     elif type(state) is Waiting:
       dep_entries = [self.ensure_entry(d) for d in state.dependencies]
       deps_ptr = self._native.as_uint64_ptr([id(e) for e in dep_entries])
-      self._native.lib().add_dependencies(self._graph,
+      self._native.lib.add_dependencies(self._graph,
                                           id(entry),
                                           deps_ptr, len(dep_entries))
     else:
@@ -175,9 +175,9 @@ class Graph(object):
     invalidated_root_entries = list(entry for entry in self._nodes.values()
                                     if predicate(entry.node, entry.state))
     invalidated_root_ids = [id(e) for e in invalidated_root_entries]
-    native_invalidated = self._native.lib().invalidate(self._graph,
-                                                       self._native.as_uint64_ptr(invalidated_root_ids),
-                                                       len(invalidated_root_ids))
+    native_invalidated = self._native.lib.invalidate(self._graph,
+                                                     self._native.as_uint64_ptr(invalidated_root_ids),
+                                                     len(invalidated_root_ids))
     invalidated_entries = list(entry for entry in self._walk_entries(invalidated_root_entries,
                                                                      lambda _: True,
                                                                      dependents=True))
@@ -233,8 +233,8 @@ class Graph(object):
 
   def execution(self, root_entries):
     roots_ptr = self._native.as_uint64_ptr([id(r) for r in root_entries])
-    execution = self._native.gc(self._native.lib().execution_create(roots_ptr, len(root_entries)),
-                                self._native.lib().execution_destroy)
+    execution = self._native.gc(self._native.lib.execution_create(roots_ptr, len(root_entries)),
+                                self._native.lib.execution_destroy)
     return execution
 
   def execution_next(self, execution, waiting_entries, completed_entries):
@@ -244,11 +244,11 @@ class Graph(object):
     states = self._native.as_uint8_ptr([e.state.type_id for e in completed_entries])
 
     # Convert the output Steps to a list of tuples of Node, dependencies, cyclic_dependencies.
-    raw_steps = self._native.lib().execution_next(self._graph,
-                                                  execution,
-                                                  waiting, len(waiting_entries),
-                                                  completed, len(completed_entries),
-                                                  states, len(completed_entries))
+    raw_steps = self._native.lib.execution_next(self._graph,
+                                                execution,
+                                                waiting, len(waiting_entries),
+                                                completed, len(completed_entries),
+                                                states, len(completed_entries))
     def entries(ptr, count):
       return [self._entry_for_id(d) for d in self._native.unpack(ptr, count)]
 

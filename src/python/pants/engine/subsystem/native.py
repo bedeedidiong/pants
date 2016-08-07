@@ -7,7 +7,7 @@ from __future__ import (absolute_import, division, generators, nested_scopes, pr
 
 from pants.binaries.binary_util import BinaryUtil
 from pants.subsystem.subsystem import Subsystem
-from pants.util.memo import memoized_method
+from pants.util.memo import memoized_property
 
 
 class Native(object):
@@ -44,7 +44,7 @@ class Native(object):
     self._version = version
     self._supportdir = supportdir
 
-  @memoized_method
+  @memoized_property
   def _ffi(self):
     from cffi import FFI
 
@@ -89,33 +89,33 @@ class Native(object):
       )
     return ffi
 
-  @memoized_method
+  @memoized_property
   def lib(self):
     """Load and return the `libgraph` module."""
     binary = self._binary_util.select_binary(self._supportdir,
                                             self._version,
                                             'native-engine')
-    return self._ffi().dlopen(binary)
+    return self._ffi.dlopen(binary)
 
   def gc(self, cdata, destructor):
     """Register a method to be called when `cdata` is garbage collected.
 
     Returns a new reference that should be used in place of `cdata`.
     """
-    return self._ffi().gc(cdata, destructor)
+    return self._ffi.gc(cdata, destructor)
 
   def unpack(self, cdata_ptr, count):
     """Given a pointer representing an array, and its count of entries, return a list."""
-    return self._ffi().unpack(cdata_ptr, count)
+    return self._ffi.unpack(cdata_ptr, count)
 
   def as_uint64_ptr(self, int_list):
-    array = self._ffi().new('uint64_t[]', len(int_list))
+    array = self._ffi.new('uint64_t[]', len(int_list))
     for i in range(0, len(int_list)):
       array[i] = int_list[i]
     return array
 
   def as_uint8_ptr(self, int_list):
-    array = self._ffi().new('uint8_t[]', len(int_list))
+    array = self._ffi.new('uint8_t[]', len(int_list))
     for i in range(0, len(int_list)):
       array[i] = int_list[i]
     return array

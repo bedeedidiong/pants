@@ -81,7 +81,7 @@ impl Graph {
     let empty_state = self.empty_state;
     let (state, dependencies) = {
       let entry = self.ensure_entry(src);
-      (entry.state, entry.dependencies.to_owned())
+      (entry.state, entry.dependencies.iter().map(|&n| n).collect::<HashSet<Node>>())
     };
     assert!(
       state == empty_state,

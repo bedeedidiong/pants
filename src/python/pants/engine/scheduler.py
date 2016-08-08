@@ -228,7 +228,7 @@ class LocalScheduler(object):
     """Creates a Step and Promise with the given dependencies of the given Node."""
     Node.validate_node(node_entry.node)
 
-    # See whether all of the dependencies for the node are available.
+    # Expose states for declared dependencies.
     deps = dict()
     for dep_entry in dependencies:
       deps[dep_entry.node] = dep_entry.state

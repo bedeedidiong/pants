@@ -96,7 +96,7 @@ class Changed(object):
     """
     scm = scm or get_scm()
     if scm is None:
-      raise TaskError('A `changed` goal or --changed option was specified, '
+      raise TaskError('A `changed` goal or `--changed` option was specified, '
                       'but no SCM is available to satisfy the request.')
     workspace = workspace or ScmWorkspace(scm)
 
